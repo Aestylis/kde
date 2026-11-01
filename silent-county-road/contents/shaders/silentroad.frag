@@ -261,27 +261,36 @@ void snowOnWire(inout vec3 col, vec2 p, vec2 a, vec2 b, float sag, float span, f
 bool ell(vec2 q, vec2 c, vec2 r) { vec2 d = (q - c) / r; return dot(d, d) < 1.0; }
 bool seg(vec2 q, vec2 a, vec2 b, float w) { vec2 pa = q - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) < w; }
 // returns 0 nothing, 1 body, 2 dark (legs/mask), 3 light (belly/face/tail), 4 eye
+// deer codes: 1 coat, 2 dark (lower legs, snout, eyes), 3 pale (chest, throat, belly, rump), 5 hoof, 6 antler
 int deerPix(vec2 q, float L, float H, float ph, float graze, bool buck, float px) {
-    float lw = max(px * 0.55, 0.035 * L);
-    // legs: diagonal pairs swing together
+    float lw = max(px * 0.55, 0.034 * L);
+    // legs: diagonal pairs swing together; coat above, darker shin, dark hoof
     for (int i = 0; i < 4; i++) {
         float hx = (i < 2 ? -0.27 : 0.24) * L + (i % 2 == 0 ? 0.0 : 0.05 * L);
         float sw = sin(ph + (i == 0 || i == 3 ? 0.0 : 3.14159)) * 0.09 * L;
-        if (seg(q, vec2(hx, 0.47 * H), vec2(hx + sw, 0.0), lw)) return (i % 2 == 0) ? 1 : 2;
+        vec2 hip = vec2(hx, 0.47 * H), foot = vec2(hx + sw, 0.0);
+        if (seg(q, hip, foot, lw)) return q.y < max(px, 0.035 * H) ? 5 : (q.y < 0.24 * H ? 2 : 1);
     }
-    if (ell(q, vec2(-0.36 * L, 0.70 * H), vec2(0.05 * L, 0.06 * H))) return 3;                 // white tail
-    if (ell(q, vec2(0.0, 0.60 * H), vec2(0.36 * L, 0.16 * H))) return q.y < 0.52 * H ? 3 : 1;   // body + pale belly
+    if (ell(q, vec2(-0.37 * L, 0.68 * H), vec2(0.045 * L, 0.06 * H))) return 3;                 // tail
+    if (ell(q, vec2(-0.29 * L, 0.66 * H), vec2(0.07 * L, 0.08 * H))) return 3;                  // pale rump patch
+    if (ell(q, vec2(0.0, 0.60 * H), vec2(0.36 * L, 0.16 * H))) return (q.y < 0.50 * H || q.x > 0.25 * L) ? 3 : 1;   // body, pale belly + chest
     vec2 nb = vec2(0.27 * L, 0.64 * H);
-    vec2 ht = mix(vec2(0.40 * L, 0.90 * H), vec2(0.47 * L, 0.10 * H), graze);                  // head up / grazing
-    if (seg(q, nb, ht, 0.07 * L)) return 1;                                                      // neck
+    vec2 ht = mix(vec2(0.40 * L, 0.90 * H), vec2(0.47 * L, 0.10 * H), graze);                    // head up / grazing
+    vec2 nd = normalize(ht - nb), nn = vec2(nd.y, -nd.x);                                        // neck direction / front side
+    if (seg(q, nb, ht, 0.07 * L)) return dot(q - nb, nn) > 0.025 * L ? 3 : 1;                    // neck with pale throat
     vec2 dir = normalize(vec2(1.0, mix(-0.35, -1.6, graze)));
-    if (ell(q, ht, vec2(0.075 * L, 0.055 * H))) return 1;                                       // head
-    if (ell(q, ht + dir * 0.08 * L, vec2(0.05 * L, 0.03 * H))) return 2;                        // snout
-    vec2 ear = ht + vec2(-0.03 * L, mix(0.07, 0.05, graze) * H);
-    if (ell(q, ear, vec2(0.025 * L, 0.04 * H)) || ell(q, ear + vec2(-0.045 * L, 0.0), vec2(0.022 * L, 0.035 * H))) return 1;
-    if (buck && graze < 0.5) {                                                                   // small antlers
-        vec2 a0 = ht + vec2(-0.01 * L, 0.05 * H);
-        if (seg(q, a0, a0 + vec2(-0.03 * L, 0.13 * H), px * 0.55) || seg(q, a0 + vec2(-0.02 * L, 0.08 * H), a0 + vec2(0.04 * L, 0.12 * H), px * 0.55)) return 2;
+    if (ell(q, ht + dir * 0.085 * L, vec2(0.045 * L, 0.03 * H))) return 2;                       // dark snout
+    if (ell(q, ht + dir * 0.02 * L + vec2(0.0, 0.015 * H), vec2(0.012 * L, 0.012 * H))) return 2; // eye
+    if (ell(q, ht, vec2(0.075 * L, 0.055 * H))) return 1;                                        // head
+    vec2 ear = ht + vec2(-0.07 * L, mix(0.05, 0.03, graze) * H);
+    if (ell(q, ear, vec2(0.05 * L, 0.025 * H))) return 3;                                        // big ear, out to the side
+    if (buck && graze < 0.5) {                                                                    // branching antlers
+        float aw = px * 0.6;
+        vec2 a0 = ht + vec2(-0.02 * L, 0.05 * H), a1 = a0 + vec2(-0.07 * L, 0.20 * H), a2 = a1 + vec2(0.04 * L, 0.07 * H);
+        if (seg(q, a0, a1, aw) || seg(q, a1, a2, aw)) return 6;                                  // main beam, sweeping up and back
+        vec2 b1 = mix(a0, a1, 0.30), b2 = mix(a0, a1, 0.65), b3 = a1;
+        if (seg(q, b1, b1 + vec2(0.05 * L, 0.07 * H), aw) || seg(q, b2, b2 + vec2(0.055 * L, 0.08 * H), aw) ||
+            seg(q, b3, b3 + vec2(-0.04 * L, 0.06 * H), aw)) return 6;                            // tines
     }
     return 0;
 }
@@ -506,7 +515,7 @@ void main() {
             if (k > 0) {
                 vec3 c;
                 if (raccoon) c = k == 1 ? vec3(0.40, 0.40, 0.42) : k == 2 ? vec3(0.10, 0.10, 0.11) : k == 3 ? vec3(0.78, 0.78, 0.76) : vec3(0.05, 0.05, 0.05);
-                else         c = k == 1 ? vec3(0.47, 0.34, 0.22) : k == 2 ? vec3(0.22, 0.16, 0.11) : vec3(0.82, 0.76, 0.66);
+                else         c = k == 1 ? vec3(0.66, 0.38, 0.18) : k == 2 ? vec3(0.42, 0.20, 0.09) : k == 3 ? vec3(0.93, 0.68, 0.40) : k == 5 ? vec3(0.24, 0.24, 0.26) : vec3(0.64, 0.56, 0.32);
                 c *= mix(0.30, 1.0, day);                                                  // dim at night ...
                 c += c * clamp(L, 0.0, 1.0) * 1.2;                       // ... lifted by lamplight
                 if (raccoon && k == 4 && L > 0.12) c = vec3(0.95, 0.98, 0.70);   // eyeshine
