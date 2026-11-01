@@ -116,6 +116,31 @@ float roadT(float y) { return clamp((HZ - y) / HZ, 0.0, 1.0); }               //
 float roadCx(float y) { float t = roadT(y); return VP.x + t * (A * 0.47 - VP.x) + 0.05 * A * t * t; }
 float roadHw(float y) { float t = roadT(y); return 0.003 + t * 0.26; }
 
+// Utility pole k of a line receding along the right verge (k = 0 is the near one). Perspective: depth t halves-ish
+// per pole; lateral offset, height, crossarm and wire sag all scale with t.
+struct Pole { float t; vec2 base; vec2 top; float armY; vec2 armL; vec2 armR; float wpx; };
+Pole pole(int k) {
+    Pole P;
+    P.t = 0.375 / (1.0 + 1.2 * float(k));
+    float gy = HZ - P.t * HZ;
+    P.base = vec2(roadCx(gy) + 1.86 * P.t, gy);
+    P.top = vec2(P.base.x + (k == 0 ? 0.02 : 0.0), gy + 1.68 * P.t);    // the near one leans
+    P.armY = P.top.y - 0.107 * P.t;
+    P.armL = vec2(P.top.x - 0.133 * P.t, P.armY);
+    P.armR = vec2(P.top.x + 0.120 * P.t, P.armY);
+    P.wpx = max(1.0, 2.0 * P.t / 0.375);
+    return P;
+}
+// sagging wire from a to b: true if p is on it (thickness corrected for slope so steep spans have no gaps)
+bool onWire(vec2 p, vec2 a, vec2 b, float sag) {
+    if (p.x < min(a.x, b.x) || p.x > max(a.x, b.x)) return false;
+    float dxab = b.x - a.x;
+    float s = (p.x - a.x) / dxab;
+    float y = mix(a.y, b.y, s) - sag * 4.0 * s * (1.0 - s);
+    float slope = (b.y - a.y) / dxab - sag * 4.0 * (1.0 - 2.0 * s) / dxab;
+    return abs(p.y - y) < px1 * min(0.5 * sqrt(1.0 + slope * slope), 3.0);
+}
+
 // spruce silhouette: cell grid along x, returns 1 inside a tree; tip = 1 on snowy tier tips
 float spruces(vec2 p, float baseY, float cw, float hMin, float hMax, float seed, float gapX, float gapW, out float tip) {
     tip = 0.0;
@@ -308,23 +333,27 @@ void main() {
         if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
     }
 
-    // ---------------- UTILITY POLES + WIRE
-    vec2 poleB = vec2(A * 0.70, 0.25), poleT = vec2(A * 0.70 + 0.02, 0.88);          // leaning
-    if (segPx(p, poleB, poleT) < 0.9) col = DN(vec3(0.04, 0.045, 0.06), vec3(0.22, 0.20, 0.19));
-    vec2 armL = vec2(poleT.x - 0.05, 0.835), armR = vec2(poleT.x + 0.045, 0.842);
-    if (segPx(p, armL, armR) < 0.6) col = DN(vec3(0.04, 0.045, 0.06), vec3(0.22, 0.20, 0.19));
-    if (abs(p.x - (armL.x + armR.x) * 0.5) < 0.048 && p.y > 0.842 && p.y < 0.842 + px1 * (0.6 + 1.2 * e)) col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));
-    vec2 farB = vec2(VP.x + 0.12, HZ - 0.008), farTop = vec2(VP.x + 0.124, HZ + 0.11);
-    if (segPx(p, farB, farTop) < 0.6) col = DN(vec3(0.06, 0.07, 0.09), vec3(0.22, 0.20, 0.19));
-    // sagging wires: near crossarm -> far pole, and near crossarm -> off-screen right
-    for (int w = 0; w < 2; w++) {
-        vec2 a = w == 0 ? armL : armR;
-        vec2 b = w == 0 ? farTop + vec2(0.0, -0.004) : vec2(A + 0.05, 0.80);
-        if (p.x > min(a.x, b.x) && p.x < max(a.x, b.x)) {
-            float s = (p.x - a.x) / (b.x - a.x);
-            float y = mix(a.y, b.y, s) - (w == 0 ? 0.035 : 0.05) * 4.0 * s * (1.0 - s);
-            if (abs(p.y - y) < px1 * 0.5) col = DN(vec3(0.06, 0.07, 0.09), vec3(0.22, 0.20, 0.19));
+    // ---------------- UTILITY POLES + WIRES (a line of poles receding to the vanishing point)
+    vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.22, 0.20, 0.19));
+    vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.22, 0.20, 0.19));
+    for (int k = 0; k < 7; k++) {
+        Pole P = pole(k);
+        if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
+            float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
+            if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1) col = poleCol;
         }
+        if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
+        if (k == 0 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + 1.2 * e))
+            col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
+        if (k < 6) {                                              // two wires to the next pole
+            Pole Q = pole(k + 1);
+            float sag = 0.035 * (P.t + Q.t) / 0.55;
+            if (onWire(p, P.armL, Q.armL, sag) || onWire(p, P.armR, Q.armR, sag)) col = wireCol;
+        }
+    }
+    {   // and back toward the viewer, off the right edge
+        Pole P = pole(0);
+        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06)) col = wireCol;
     }
 
     // ---------------- STREETLAMPS (posts, arms, heads)
@@ -431,7 +460,9 @@ void main() {
 
     // ---------------- BIRDS on the wire (the near crossarm -> far pole wire)
     if (birds.x >= 0.0) {
-        vec2 wa = vec2(A * 0.70 + 0.02 - 0.05, 0.835), wb = vec2(VP.x + 0.124, HZ + 0.106);
+        Pole P0 = pole(0), P1 = pole(1);
+        vec2 wa = P0.armL, wb = P1.armL;
+        float wsag = 0.035 * (P0.t + P1.t) / 0.55;
         float tB = birds.x;
         for (int i = 0; i < 7; i++) {
             if (float(i) >= birds.y) break;
@@ -443,7 +474,7 @@ void main() {
             float leave = birds.w + float(i) * 1.3 + hi * 4.0;
             float hops = floor(max(tB - arrive, 0.0) / (25.0 + hj * 30.0));
             sp = clamp(sp + 0.025 * (hash11(hops + hi * 50.0) - 0.5) * min(hops, 1.0), 0.1, 0.9);
-            vec2 perch = vec2(mix(wa.x, wb.x, sp), mix(wa.y, wb.y, sp) - 0.035 * 4.0 * sp * (1.0 - sp) + px1 * 1.0);
+            vec2 perch = vec2(mix(wa.x, wb.x, sp), mix(wa.y, wb.y, sp) - wsag * 4.0 * sp * (1.0 - sp) + px1 * 1.0);
             vec2 bp; bool flying = true;
             if (tB < arrive) {                                    // flying in along a falling arc from the side
                 float u = clamp(tB / arrive, 0.0, 1.0);
