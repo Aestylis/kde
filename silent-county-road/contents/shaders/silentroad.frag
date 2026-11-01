@@ -97,7 +97,7 @@ const vec3 PAL_DAWN[20] = vec3[20](
     vec3(0.090, 0.120, 0.250), vec3(0.150, 0.210, 0.400), vec3(0.240, 0.330, 0.560), vec3(0.380, 0.480, 0.700));
 const vec3 PAL_TAIL = vec3(0.702, 0.235, 0.188);
 vec3 quantize(vec3 c, vec2 q) {
-    c += (bayer4(q) - 0.5) * 0.055;
+    c += (bayer4(q) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
     float bd = 1e9; vec3 best = vec3(0.0);
     for (int i = 0; i < 20; i++) {
         vec3 pc = mix(mix(PAL_NIGHT[i], PAL_DAY[i], day), mix(PAL_DUSK[i], PAL_DAWN[i], rising), twi * 0.85);
@@ -109,6 +109,20 @@ vec3 quantize(vec3 c, vec2 q) {
 
 // night colour -> day colour, by the global `day`
 vec3 DN(vec3 night, vec3 dayc) { return mix(night, dayc, day); }
+
+float gCover;
+float cloudField(vec2 p) {
+    vec2 cp = vec2(p.x * 2.2 + time * 0.0025, p.y * 4.5 + 3.0);
+    cp += 0.45 * vec2(fbm(cp * 0.6 + 3.1), fbm(cp * 0.6 + 7.7));
+    float d = fbm(cp) * 0.75 + fbm(cp * 2.3 + vec2(time * 0.004, 0.0)) * 0.35;
+    return clamp((d - gCover) / 0.30, 0.0, 1.0);
+}
+float cloudLight(vec2 p, vec2 lightPos) {
+    vec2 dir = normalize(lightPos - p);
+    float acc = 0.0;
+    for (int i = 1; i <= 6; i++) acc += cloudField(p + dir * 0.022 * float(i));
+    return exp(-acc * 0.5);
+}
 
 // ------------------------------------------------------------------ layout (uv: y up, 0..1 tall, 0..A wide)
 const float HZ = 0.40;           // horizon
@@ -281,16 +295,25 @@ void main() {
     vec3 col = mix(DN(vec3(0.115, 0.14, 0.20), vec3(0.74, 0.82, 0.92)), DN(vec3(0.045, 0.06, 0.11), vec3(0.44, 0.60, 0.84)), pow(sk, 0.6));
     col = mix(col, vec3(0.20, 0.26, 0.46), twi * 0.38 * smoothstep(0.35, 1.0, sk));      // blue hour overhead (soft: the sky screen carries most of it)
     col = mix(col, glow, twi * 0.75 * exp(-sk * 3.0));                             // horizon glow at dawn/dusk
-    // clouds: same recipe as the sky screen, thinning toward the horizon so the two monitors read as one sky
+    // clouds: same recipe + lighting as the sky screen, thinning toward the horizon so the two monitors read as one sky
     if (p.y > HZ) {
-        vec2 cp = vec2(p.x * 2.2 + time * 0.0025, p.y * 4.5 + 3.0);
-        float cd = fbm(cp) * 0.75 + fbm(cp * 2.3 + vec2(time * 0.004, 0.0)) * 0.35;
-        float cov = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y));
-        float cl = smoothstep(cov, cov + 0.18, cd);
-        float band = floor(clamp((cd - cov) / 0.30, 0.0, 0.999) * 3.0) / 2.0;
-        vec3 cc = mix(DN(vec3(0.085, 0.10, 0.14), vec3(0.58, 0.62, 0.68)), DN(vec3(0.15, 0.175, 0.23), vec3(0.82, 0.85, 0.89)), band);
-        cc = mix(cc, glow * 1.05, twi * 0.35);
-        col = mix(col, cc, smoothstep(0.0, 0.25, cl) * 0.85);
+        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y));
+        float dens = cloudField(p);
+        float cl = smoothstep(0.0, 0.25, dens);
+        if (cl > 0.0) {
+            bool bySun = day > 0.35 || twi > 0.25;
+            vec2 lightPos = bySun ? vec2(sunX * A, HZ + sunElev * 0.035) : vec2(A * 0.66, 1.6);   // moon: up on the sky screen
+            vec3 lightCol = bySun ? mix(mix(vec3(1.0, 0.72, 0.42), vec3(0.98, 0.72, 0.70), rising), vec3(1.0, 0.98, 0.93), day)
+                                  : vec3(0.50, 0.56, 0.68);
+            vec3 shadowCol = mix(DN(vec3(0.06, 0.07, 0.11), vec3(0.54, 0.59, 0.67)), vec3(0.30, 0.23, 0.32), twi * (1.0 - day));
+            vec3 cc = mix(shadowCol, lightCol, 0.12 + 0.88 * cloudLight(p, lightPos) * (bySun ? mix(0.75, 1.0, day) : 0.8));
+            cc *= mix(1.0, 0.90, smoothstep(0.55, 1.0, dens));
+            float above = 0.0;
+            for (int i = 1; i <= 4; i++) above += cloudField(p + vec2(0.0, 0.03 * float(i)));
+            cc *= mix(1.0, 0.68, smoothstep(0.4, 3.2, above));
+            cc += lightCol * (1.0 - cl) * exp(-length(p - lightPos) * 3.0) * 0.55;
+            col = mix(col, cc, cl * 0.9);
+        }
     }
     col += warm * halo * 0.5;
     // low sun: a pale disc just above the tree line around sunrise / sunset (higher sun lives on the sky screen)

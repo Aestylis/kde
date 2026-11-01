@@ -3,7 +3,8 @@
 // Same pixel grid, palette and dithering as silentroad.frag. No textures, no CPU-side state:
 //   SKY    deep navy gradient; the bottom edge matches the road scene's upper sky so the two screens join up
 //   MOON   pale disc with faint craters + cold halo; phase follows the real lunar calendar (uniform `moonPhase`)
-//   CLOUDS slow fbm snow-cloud banks, posterised into a few tones, silver-lined toward the moon; they dim the moon
+//   CLOUDS domain-warped fbm cumulus, lit by a short ray-march toward the real light (sun by day / at twilight
+//          from below the horizon, the moon at night): bright lit faces, dark undersides, glowing thin edges
 //   STARS  sparse, faint, only in cloud gaps
 //   SNOW   the same hash flake layers as the road, revealed mostly where moonlight catches them
 //   DAY    `day`/`twi`/`rising` re-light it from the real sun: pale overcast day with the sun tracking across,
@@ -75,7 +76,7 @@ const vec3 PAL_DAWN[20] = vec3[20](
     vec3(0.090, 0.120, 0.250), vec3(0.150, 0.210, 0.400), vec3(0.240, 0.330, 0.560), vec3(0.380, 0.480, 0.700));
 const vec3 PAL_TAIL = vec3(0.702, 0.235, 0.188);
 vec3 quantize(vec3 c, vec2 q) {
-    c += (bayer4(q) - 0.5) * 0.055;
+    c += (bayer4(q) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
     float bd = 1e9; vec3 best = vec3(0.0);
     for (int i = 0; i < 20; i++) {
         vec3 pc = mix(mix(PAL_NIGHT[i], PAL_DAY[i], day), mix(PAL_DUSK[i], PAL_DAWN[i], rising), twi * 0.85);
@@ -86,6 +87,22 @@ vec3 quantize(vec3 c, vec2 q) {
 }
 
 vec3 DN(vec3 n, vec3 d) { return mix(n, d, day); }
+
+float gWind, gCover;                     // set in main, used by the cloud field
+// cloud density (0 = clear sky .. ~1 = thick core): warped fbm, drifting with the wind
+float cloudField(vec2 p) {
+    vec2 cp = vec2(p.x * 2.2 + gWind * 0.0009 + time * 0.0025, p.y * 4.5);
+    cp += 0.45 * vec2(fbm(cp * 0.6 + 3.1), fbm(cp * 0.6 + 7.7));        // warp: billowing, cumulus-like shapes
+    float d = fbm(cp) * 0.75 + fbm(cp * 2.3 + vec2(time * 0.004, 0.0)) * 0.35;
+    return clamp((d - gCover) / 0.30, 0.0, 1.0);
+}
+// light reaching a cloud point: march toward the light, Beer-Lambert through the cloud in the way
+float cloudLight(vec2 p, vec2 lightPos) {
+    vec2 dir = normalize(lightPos - p);
+    float acc = 0.0;
+    for (int i = 1; i <= 6; i++) acc += cloudField(p + dir * 0.022 * float(i));
+    return exp(-acc * 0.5);
+}
 
 void main() {
     vec2 W = floor(res / pix);
@@ -115,18 +132,12 @@ void main() {
     vec2 md = (p - mc) / mr;
     float mdist = length(md);
 
-    // ---------------- CLOUDS: drifting fbm, posterised into bands; cover grows through the night
-    vec2 cp = vec2(p.x * 2.2 + wind * 0.0009 + time * 0.0025, p.y * 4.5);
-    float d = fbm(cp) * 0.75 + fbm(cp * 2.3 + vec2(time * 0.004, 0.0)) * 0.35;
-    float cover = mix(0.46, 0.36, e);                    // lower threshold = more cloud
-    float cloud = smoothstep(cover, cover + 0.18, d);
-    float cloudAtMoon;                                   // how much cloud sits in front of the moon
-    {
-        vec2 cm = vec2(mc.x * 2.2 + wind * 0.0009 + time * 0.0025, mc.y * 4.5);
-        float dm = fbm(cm) * 0.75 + fbm(cm * 2.3 + vec2(time * 0.004, 0.0)) * 0.35;
-        cloudAtMoon = smoothstep(cover, cover + 0.18, dm);
-    }
-
+    // ---------------- CLOUDS
+    gWind = wind;
+    gCover = mix(0.46, 0.36, e);                         // lower threshold = more cloud through the night
+    float dens = cloudField(p);
+    float cloud = smoothstep(0.0, 0.25, dens);
+    float cloudAtMoon = smoothstep(0.0, 0.25, cloudField(mc));
     // moon halo (dimmed when clouds cover the moon)
     float moonUp = 1.0 - smoothstep(0.15, 0.55, day);
     float moonVis = (1.0 - 0.55 * cloudAtMoon) * moonUp;     // halo + moonlight soften when cloud crosses; gone by day
@@ -153,18 +164,25 @@ void main() {
     // sun disc (clouds below cover it)
     if (sunElev > 2.0) col = mix(col, vec3(0.99, 0.97, 0.90), smoothstep(0.080, 0.073, sunD) * (0.55 + 0.45 * day));
 
-    // clouds over everything: shaded bands, silver-lined toward the moon
+    // clouds over everything, lit by the real light source
     if (cloud > 0.0) {
-        float band = floor(clamp((d - cover) / 0.30, 0.0, 0.999) * 3.0) / 2.0;          // 3 posterised tones
-        vec3 cc = mix(DN(vec3(0.085, 0.10, 0.14), vec3(0.58, 0.62, 0.68)), DN(vec3(0.15, 0.175, 0.23), vec3(0.82, 0.85, 0.89)), band);
-        // moonlight on cloud edges near the moon
-        float near = exp(-max(mdist - 0.8, 0.0) * 0.40) * (0.3 + 0.7 * abs(cos(6.2831853 * moonPhase - 3.14159265)));
-        float edge = 1.0 - smoothstep(0.0, 0.35, cloud);
-        cc += vec3(0.50, 0.55, 0.64) * near * (0.15 + 1.1 * edge * edge) * moonUp;
-        float nearSun = exp(-max(sunD - 0.05, 0.0) * 3.0) * step(-2.0, sunElev);
-        cc += mix(glow, vec3(1.0, 0.98, 0.94), day) * nearSun * (0.10 + 0.5 * edge * edge) * 0.6;
-        cc = mix(cc, glow * 1.05, twi * (0.15 + 0.28 * edge) * smoothstep(0.9, 0.0, p.y));   // edges catch dawn / dusk
-        col = mix(col, cc, smoothstep(0.0, 0.25, cloud));
+        float moonBright = 0.3 + 0.7 * abs(cos(6.2831853 * moonPhase - 3.14159265));   // full moon brightest
+        bool bySun = day > 0.35 || twi > 0.25;
+        vec2 lightPos = bySun ? sc : mc;
+        vec3 lightCol = bySun ? mix(mix(vec3(1.0, 0.72, 0.42), vec3(0.98, 0.72, 0.70), rising), vec3(1.0, 0.98, 0.93), day)
+                              : vec3(0.62, 0.68, 0.80) * moonBright * moonUp;
+        vec3 shadowCol = mix(DN(vec3(0.06, 0.07, 0.11), vec3(0.54, 0.59, 0.67)), vec3(0.30, 0.23, 0.32), twi * (1.0 - day));
+        float T = cloudLight(p, lightPos);
+        float strength = bySun ? mix(0.75, 1.0, day) : 0.9;
+        vec3 cc = mix(shadowCol, lightCol, 0.12 + 0.88 * T * strength);
+        cc *= mix(1.0, 0.90, smoothstep(0.55, 1.0, dens));                              // dense cores a touch darker
+        // sky light comes from above: the more cloud stacked overhead, the darker the base (heavy undersides)
+        float above = 0.0;
+        for (int i = 1; i <= 4; i++) above += cloudField(p + vec2(0.0, 0.03 * float(i)));
+        cc *= mix(1.0, 0.68, smoothstep(0.4, 3.2, above));
+        float ld = length(p - lightPos);
+        cc += lightCol * (1.0 - cloud) * exp(-ld * 3.0) * 0.55;                       // thin edges toward the light glow
+        col = mix(col, cc, cloud);
     }
 
     // ---------------- SNOW: same layers as the road; visible mostly in the moon's light

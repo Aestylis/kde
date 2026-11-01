@@ -6,7 +6,7 @@ A quiet pixel-art winter road that follows the real time of day, with a tiny sno
 
 ### Description
 
-A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader. No images or textures.
+A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader. No images or textures. Clouds are lit by the real sun or moon: bright, sun-facing tops, darker undersides, golden edges at sunset.
 
 The wallpaper follows the real time of day. Sunrise, sunset and the sun's position are calculated from your latitude and longitude. The scene changes between hand-picked palettes for night, dawn, day and dusk, with cold blue nights, rose mornings, clear winter days and mauve evenings.
 
@@ -33,7 +33,7 @@ Both scenes use the same clock, so wind and snow stay in sync.
 
 ### Performance
 
-About 1 to 3% of one CPU core. Rendering is handled by the GPU.
+About 1 to 3% of one CPU core. Rendering is handled by the GPU at the pixel-art resolution, so it stays light even on large screens.
 
 ### Settings
 
@@ -59,7 +59,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day.
+**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); rendering at pixel-art resolution for much lower GPU use.
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 

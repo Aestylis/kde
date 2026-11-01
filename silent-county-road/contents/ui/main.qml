@@ -241,6 +241,11 @@ WallpaperItem {
         property real meltDur: 4 * 3600
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
+        // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:
+        // identical image, ~pixelSize^2 times less GPU work than shading every screen pixel.
+        layer.enabled: true
+        layer.smooth: false
+        layer.textureSize: Qt.size(Math.max(1, Math.floor(width / pix)), Math.max(1, Math.floor(height / pix)))
     }
 
     Component.onCompleted: update()

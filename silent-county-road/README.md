@@ -10,6 +10,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 ![Noon](screenshots/3-noon.png)
 ![Dusk](screenshots/4-dusk.png)
 
+- Clouds lit by the real sun or moon: sunlit tops, dark undersides, golden edges at sunset
 - Real sunrise / sunset / sun position for your latitude and longitude; hand-picked palettes for night, dawn, day, dusk
 - Snow in three depth layers, mostly visible in the lamplight at night; patchy, drifting snowfall and wind moods
 - Occasional traffic in both directions: headlights or tail lights at night, tyre tracks that fill back in
