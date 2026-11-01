@@ -3,6 +3,8 @@
 A quiet pixel-art winter road for KDE Plasma 6 that follows the real time of day, with a tiny snowplough that clears
 it every morning. Fully procedural: one GPU fragment shader, no images.
 
+![Silent County Road at night — snow drifting through the lamplight, the far lamp stuttering](screenshots/night.gif)
+
 ![Night](screenshots/1-night.png)
 ![The plough](screenshots/2-plough.png)
 ![Noon](screenshots/3-noon.png)
