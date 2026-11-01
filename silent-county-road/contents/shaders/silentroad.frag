@@ -505,12 +505,13 @@ void main() {
         float lt = li == 0 ? lt1 : lt2, g = li == 0 ? g1 : g2, postX = li == 0 ? post1 : post2;
         vec2 head = li == 0 ? lamp1 : lamp2;
         float topY = head.y + 0.02 * lt, fl = li == 0 ? f1 : f2;
-        vec3 metal = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
+        float lfade = smoothstep(0.16, 0.02, lt) * 0.9;                                                   // distance haze
+        vec3 metal = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, lfade);
         if (p.y >= g && p.y <= topY && abs(p.x - postX) < max(0.5, 2.0 * lt) * px1) col = metal;          // post
         if (p.x >= postX && p.x <= head.x && abs(p.y - topY) < max(0.5, 1.2 * lt) * px1) col = metal;     // arm
         if (abs(p.x - head.x) < max(0.5 * px1, 0.012 * lt * 2.0) && p.y <= topY && p.y > head.y - max(0.5 * px1, 0.006 * lt * 2.0)) col = metal;   // drop to the head
         vec2 hs = max(vec2(0.024, 0.012) * lt, vec2(px1 * 0.75));
-        if (length((p - head) / hs) < 1.0) col = mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.45, 0.46, 0.48)), li == 0 ? vec3(0.95, 0.83, 0.62) : vec3(0.80, 0.64, 0.42), fl);
+        if (length((p - head) / hs) < 1.0) col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.45, 0.46, 0.48)), hazeCol, lfade), li == 0 ? vec3(0.95, 0.83, 0.62) : vec3(0.80, 0.64, 0.42), fl);
         if (li == 0 && abs(p.x - head.x) < hs.x && p.y > topY + 0.5 * px1 && p.y < topY + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));   // snow cap
     }
 
@@ -551,11 +552,13 @@ void main() {
         vec2 head = vec2(lx - side * 0.19 * tl, topY - px1 * 0.5);
         float on = lamps * (lampAge < 6.0 + float(i) * 2.0 ? step(0.5, hash11(floor(lampAge * 8.0) + 17.0 + float(i) * 5.0)) * smoothstep(0.0, 1.0, lampAge - float(i)) : 1.0);
         vec3 lc = i == 0 ? vec3(1.0, 0.72, 0.38) : vec3(0.86, 0.92, 1.0);
-        if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25));
-        if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) col = DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25));
+        float dfade = smoothstep(0.16, 0.02, tl) * 0.9;
+        vec3 dmetal = mix(DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25)), hazeCol, dfade);
+        if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = dmetal;
+        if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) col = dmetal;
         float dh = length((p - head) / px1);
-        col += lc * on * (exp(-dh * 0.55) * 0.55 + exp(-length(vec2((p.x - head.x) / (0.03 * tl / 0.055), (p.y - gy) / (0.008 * tl / 0.055)))) * 0.25);
-        if (dh < 0.75) col = mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), lc, on);
+        col += lc * on * (1.0 - 0.45 * dfade) * (exp(-dh * (0.55 + 0.5 * dfade)) * 0.55 + exp(-length(vec2((p.x - head.x) / (0.03 * tl / 0.055), (p.y - gy) / (0.008 * tl / 0.055)))) * 0.25);
+        if (dh < 0.75) col = mix(mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), hazeCol, dfade), lc, on);
     }
 
     // ---------------- PLOUGH (drawn after the fog: it is close to the camera; seen from behind, driving away up the road; amber beacon on the cab)
