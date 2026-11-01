@@ -507,12 +507,24 @@ void main() {
         float topY = head.y + 0.02 * lt, fl = li == 0 ? f1 : f2;
         float lfade = smoothstep(0.16, 0.02, lt) * 0.9;                                                   // distance haze
         vec3 metal = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, lfade);
-        if (p.y >= g && p.y <= topY && abs(p.x - postX) < max(0.5, 2.0 * lt) * px1) col = metal;          // post
-        if (p.x >= postX && p.x <= head.x && abs(p.y - topY) < max(0.5, 1.2 * lt) * px1) col = metal;     // arm
-        if (abs(p.x - head.x) < max(0.5 * px1, 0.012 * lt * 2.0) && p.y <= topY && p.y > head.y - max(0.5 * px1, 0.006 * lt * 2.0)) col = metal;   // drop to the head
-        vec2 hs = max(vec2(0.024, 0.012) * lt, vec2(px1 * 0.75));
-        if (length((p - head) / hs) < 1.0) col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.45, 0.46, 0.48)), hazeCol, lfade), li == 0 ? vec3(0.95, 0.83, 0.62) : vec3(0.80, 0.64, 0.42), fl);
-        if (li == 0 && abs(p.x - head.x) < hs.x && p.y > topY + 0.5 * px1 && p.y < topY + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));   // snow cap
+        vec3 metalHi = mix(DN(vec3(0.10, 0.11, 0.14), vec3(0.36, 0.37, 0.39)), hazeCol, lfade);
+        // cobra-head streetlight: heavy base, thin pole, quarter-circle bend into the arm, flat housing, lens underneath
+        float pw = max(px1, 0.009 * lt);                     // pole width
+        float bw = max(2.0 * px1, 2.3 * pw), baseH = 0.18 * (topY - g);
+        float r = max(2.0 * px1, 0.05 * lt);                 // bend radius
+        float Lh = max(3.0 * px1, 0.085 * lt), hh = max(1.5 * px1, 0.014 * lt);
+        float hx0 = head.x - 0.55 * Lh, hx1 = head.x + 0.45 * Lh;
+        if (p.y >= g && p.y < g + baseH && abs(p.x - postX) < bw * 0.5) col = (p.x < postX - bw * 0.5 + px1) ? metalHi : metal;   // base
+        if (p.y >= g && p.y <= topY - r && abs(p.x - postX) < pw * 0.5) col = metal;                                          // pole
+        vec2 bc = vec2(postX + r, topY - r);                                                                                   // bend
+        if (p.x <= bc.x && p.y >= bc.y && abs(length(p - bc) - r) < pw * 0.5) col = metal;
+        if (p.x >= bc.x && p.x <= hx0 && abs(p.y - topY) < pw * 0.5) col = metal;                                             // arm
+        if (p.x >= hx0 && p.x <= hx1 && p.y >= topY - hh && p.y <= topY + hh * 0.6) {                                         // housing
+            col = metal;
+            if (p.y < topY - hh + max(px1, hh * 0.45) && p.x > hx0 + px1 && p.x < hx1 - px1)                                   // lens strip
+                col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.50, 0.51, 0.53)), hazeCol, lfade), li == 0 ? vec3(1.0, 0.86, 0.55) : vec3(0.85, 0.68, 0.42), fl);
+        }
+        if (li == 0 && p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));   // snow cap
     }
 
     // ---------------- CLOUD SHADOWS: a drifting cloud layer projected onto the ground plane (and the trees standing on it)
