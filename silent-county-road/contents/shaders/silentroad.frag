@@ -441,11 +441,14 @@ void main() {
     }
 
     // ---------------- FENCE (right verge, receding to the vanishing point; buried through the night)
-    for (int i = 0; i < 9; i++) {
-        float t = 0.18 + float(i) * 0.105;                 // depth along road
+    vec2 prevF = vec2(1e9);
+    for (int i = 0; i < 40; i++) {
+        float t = 1.02 / (1.0 + 0.42 * float(i));          // evenly spaced in the world: they bunch up into the distance
         float y = HZ - t * HZ;
         float x = roadCx(y) + roadHw(y) * 1.32 + 0.01 * t;
-        float h = 0.075 * t * (1.0 - 0.55 * e);             // buried
+        if (abs(prevF.x - x) < 2.0 * px1 && abs(prevF.y - y) < 2.0 * px1) break;   // closer than 2 px: stop
+        prevF = vec2(x, y);
+        float h = max(px1, 0.075 * t * (1.0 - 0.55 * e));   // buried (never below one pixel)
         float w = max(px1 * 1.0, 0.007 * t);
         if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
         float cap = px1 * (1.0 + 1.5 * e);                  // snow cap grows
