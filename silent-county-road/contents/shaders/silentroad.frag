@@ -135,7 +135,7 @@ vec2 VP;                         // road vanishing point
 float px1;                       // one pixel in uv
 
 float roadT(float y) { return clamp((HZ - y) / HZ, 0.0, 1.0); }               // 0 at horizon, 1 at bottom
-float roadCx(float y) { float t = roadT(y); return VP.x + t * (A * 0.47 - VP.x) + 0.05 * A * t * t; }
+float roadCx(float y) { float t = roadT(y); return VP.x + t * (A * 0.41 - VP.x) + 0.02 * A * t * t; }   // both edges fan out from the VP
 float roadHw(float y) { float t = roadT(y); return 0.0005 + t * 0.26; }   // converges to the vanishing point
 
 // Utility pole k of a line receding along the right verge (k = 0 is the near one). Perspective: depth t halves-ish
@@ -445,28 +445,32 @@ void main() {
     }
 
     // ---------------- FENCE (right verge, receding to the vanishing point; buried through the night)
-    vec2 prevF = vec2(1e9);
-    for (int i = 0; i < 40; i++) {
-        float t = 1.02 / (1.0 + 0.42 * float(i));          // evenly spaced in the world: they bunch up into the distance
-        float y = HZ - t * HZ;
-        float x = roadCx(y) + roadHw(y) * 1.32 + 0.01 * t;
-        if (abs(prevF.x - x) < 2.0 * px1 && abs(prevF.y - y) < 2.0 * px1) break;   // closer than 2 px: stop
-        prevF = vec2(x, y);
-        float h = max(px1, 0.075 * t * (1.0 - 0.55 * e));   // buried (never below one pixel)
-        float w = max(px1 * 1.0, 0.007 * t);
-        if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
-        float cap = px1 * (1.0 + 1.5 * e);                  // snow cap grows
-        if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
+    // posts t_i = 1.02 / (1 + 0.42 i): only the few whose height range can cover this row are tested
+    {
+        float tp = max((HZ - p.y) / HZ, 0.0008);                   // depth of a ground point at this row
+        float iHi = (1.02 / tp - 1.0) / 0.42;                       // posts standing at or in front of this row
+        float iLo = (1.02 / min(tp / 0.74, 1.02) - 1.0) / 0.42;     // ...whose top (+ snow cap) can reach up to it
+        for (int j = 0; j < 40; j++) {
+            float i = max(floor(iLo), 0.0) + float(j);
+            if (i > iHi + 1.0) break;
+            float t = 1.02 / (1.0 + 0.42 * i);
+            float h = max(px1, 0.075 * t * (1.0 - 0.55 * e));       // buried (never below one pixel)
+            if (h < px1 * 0.9 && t < 0.012) break;                  // beyond this they vanish into the vanishing point
+            float y = HZ - t * HZ;
+            float x = roadCx(y) + roadHw(y) * 1.32 + 0.01 * t;
+            float w = max(px1 * 1.0, 0.007 * t);
+            if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
+            float cap = px1 * (1.0 + 1.5 * e);
+            if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
+        }
     }
 
     // ---------------- UTILITY POLES + WIRES (a line of poles receding to the vanishing point)
     vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.21, 0.205, 0.21));
     vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.21, 0.205, 0.21));
-    float prevX = 1e9;
-    for (int k = 0; k < 30; k++) {                               // enough poles to reach the vanishing point
+    for (int k = 0; k < 64; k++) {                               // all the way into the vanishing point
         Pole P = pole(k);
-        if (prevX - P.base.x < 2.0 * px1) break;                 // closer than 2 px apart: they'd merge into a blob
-        prevX = P.base.x;
+        if (P.top.y - P.base.y < 1.5 * px1) break;                // shorter than ~1.5 px: gone into the distance
         if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
             float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
             if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) col = poleCol;
@@ -474,9 +478,8 @@ void main() {
         if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
         if (k == 0 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + 1.2 * e))
             col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
-        if (k < 29) {                                             // two wires to the next pole
+        if (k < 63) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
-            if (P.base.x - Q.base.x < 2.0 * px1) continue;
             float sag = 0.035 * (P.t + Q.t) / 0.55;
             if (onWire(p, P.armL, Q.armL, sag) || onWire(p, P.armR, Q.armR, sag)) col = wireCol;
             snowOnWire(col, p, P.armL, Q.armL, sag, float(k), 0.0, k < 3);
@@ -585,7 +588,7 @@ void main() {
         float tv = away ? 1.0 / (1.0 + 9.0 * veh.x) : 1.15 / (10.0 - 9.0 * veh.x);
         float yb = HZ - tv * HZ;
         float hwv = 0.003 + tv * 0.26;
-        float cxv = VP.x + tv * (A * 0.47 - VP.x) + 0.05 * A * tv * tv;
+        float cxv = VP.x + tv * (A * 0.41 - VP.x) + 0.02 * A * tv * tv;
         float xc = cxv + (away ? 1.0 : -1.0) * hwv * 0.48;                      // centre of its lane
         int vtype = int(veh.z + 0.5);
         int vcol = int(veh.w + 0.5);
