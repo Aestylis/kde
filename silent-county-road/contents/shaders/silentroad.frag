@@ -405,9 +405,13 @@ void main() {
         c = mix(c, tc, tip * (0.5 + 0.5 * e)); \
         col = mix(c, hazeCol, haze); zTree = (tT); }
 
-    // far tree line on the horizon (t ~ 0.01)
-    float farT = spruces(p, HZ - 0.004, 0.032, 0.035, 0.11, 11.0, VP.x, 0.05, tip);
+    // distant forest: a band of tiny trees on the horizon (t ~ 0.012) and a slightly larger band just in front (t ~ 0.03),
+    // sized to match the perspective of the middle groves (tree height ~ 1.1-2.0 x t)
+    float farT = spruces(p, HZ - 0.002, 0.012, 0.012, 0.030, 11.0, VP.x, 0.03, tip);
     if (farT > 0.5) { tier = 0.5; SHADE_TREE(p.x, 0.012, false) }
+    float tipB = 0.0;
+    float farB = spruces(p, HZ - 0.012, 0.024, 0.030, 0.060, 23.0, VP.x, 0.06, tipB);
+    if (farB > 0.5 && 0.03 > zTree) { tip = tipB; tier = 0.5; SHADE_TREE(p.x, 0.03, false) }
     // middle groves: both sides, set back from the road, perspective-scaled (height and offset proportional to t)
     for (int side = 0; side < 2; side++) {
         for (int i = 0; i < 12; i++) {
