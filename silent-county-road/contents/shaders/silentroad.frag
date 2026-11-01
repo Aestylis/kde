@@ -459,9 +459,11 @@ void main() {
             float y = HZ - t * HZ;
             float x = roadCx(y) + roadHw(y) * 1.32 + 0.01 * t;
             float w = max(px1 * 1.0, 0.007 * t);
-            if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
+            float fade = smoothstep(0.16, 0.02, t) * 0.9;              // far posts dissolve into the horizon haze
+            if (fade > 0.86) break;
+            if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, fade);
             float cap = px1 * (1.0 + 1.5 * e);
-            if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
+            if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, fade);
         }
     }
 
