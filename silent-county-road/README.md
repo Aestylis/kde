@@ -17,7 +17,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 - Snow in three depth layers, mostly visible in the lamplight at night; patchy, drifting snowfall and wind moods
 - Occasional traffic in both directions: headlights or tail lights at night, tyre tracks that fill back in
 - Snow builds on the power lines overnight and falls off in clumps through the late morning
-- A deer wanders through by day (stopping to graze); a fox by night. Animal sprites are CC0, "Animated Wild Animals" by ScratchIO (see contents/images/CREDITS.md)
+- A deer wanders through by day (stopping to graze); a fox by night; traffic stops for them if they cross. Animal sprites are CC0, "Animated Wild Animals" by ScratchIO (see contents/images/CREDITS.md)
 - By day, flocks of birds land on the wire for a few minutes, then fly off
 - Streetlamps off by day, stuttering on at dusk, occasionally flickering (the far one is dying)
 - Snow builds on the road overnight; ~25 min after sunrise a plough with an amber beacon clears it

@@ -98,12 +98,40 @@ WallpaperItem {
         return { start: k * slotSec + rnd(k, 2) * (slotSec - dur - 5), dur: dur,
                  dir: rnd(k, 4) < 0.5 ? 1 : -1, type: Math.floor(rnd(k, 5) * 3), col: Math.floor(rnd(k, 6) * 5) }
     }
+    // A vehicle yields to wildlife: while an animal is on the road just ahead of it, the vehicle's own clock slows to a
+    // stop (curVeh.hold collects the time spent waiting), then it pulls away once the road is clear.
+    property var curVeh: null
+    property real vehLast: 0
+    property real vehSpeed: 1
+    function vehDepth(p, dir) { return dir > 0 ? 1.0 / (1.0 + 9.0 * p) : 1.15 / (10.0 - 9.0 * p) }   // as in the shader
+    function animalBlocks(tv, dir) {
+        var a = fx.animal
+        if (a.x < -50) return false
+        var d = a.y, A = Math.max(1, width / Math.max(1, height))
+        var cx = A * (0.36 + 0.05 * d + 0.02 * d * d), hw = 0.0005 + 0.26 * d
+        if (Math.abs(a.x - cx) > hw + (a.w > 0.5 ? 0.06 : 0.11) * d) return false   // not on (or about to step onto) the road
+        return dir > 0 ? (tv > d && tv < d * 1.5 + 0.04)                         // driving away: animal just in front
+                       : (tv < d && tv > d / 1.5 - 0.03)                         // oncoming: same, nearer the viewer
+    }
     function updateTraffic() {
         var now = Date.now() / 1000
+        var dt = Math.min(1, Math.max(0, now - vehLast)); vehLast = now
         var k = Math.floor(now / slotSec)
-        var v = vehicleIn(k), active = null
-        if (v && now >= v.start && now <= v.start + v.dur) active = v
-        fx.veh = active ? Qt.vector4d((now - active.start) / active.dur, active.dir, active.type, active.col) : Qt.vector4d(-1, 0, 0, 0)
+        var active = null
+        if (curVeh && now <= curVeh.start + curVeh.dur + curVeh.hold) active = curVeh   // a waiting vehicle may outlast its slot
+        else {
+            var v = vehicleIn(k)
+            if (v && now >= v.start && now <= v.start + v.dur) { v.hold = 0; active = v; vehSpeed = 1 }
+        }
+        curVeh = active
+        if (active) {
+            var p = (now - active.start - active.hold) / active.dur
+            var target = animalBlocks(vehDepth(p, active.dir), active.dir) ? 0 : 1
+            vehSpeed += Math.max(-dt / 0.8, Math.min(dt / 1.5, target - vehSpeed))        // brake ~0.8 s, pull away ~1.5 s
+            active.hold += dt * (1 - vehSpeed)
+            p = (now - active.start - active.hold) / active.dur
+            fx.veh = Qt.vector4d(Math.min(1, Math.max(0, p)), active.dir, active.type, active.col)
+        } else fx.veh = Qt.vector4d(-1, 0, 0, 0)
         // ruts from vehicles in the last ~45 minutes, refilling with snow over ~10 minutes
         var tr = 0, tl = 0
         for (var j = 0; j <= 9; j++) {

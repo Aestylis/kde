@@ -21,7 +21,7 @@ The wallpaper follows the real time of day. Sunrise, sunset and the sun's positi
 - Snowfall comes and goes in patches.
 - Now and then a car, pickup or van passes in either direction, with headlights or tail lights at night. Its tyre tracks slowly fill back in with snow.
 - Snow builds up on the power lines overnight and drops off in clumps through the late morning.
-- A deer wanders through by day, stopping to graze; at night a fox trots along the verge under the lamps. (Animal sprites: CC0, "Animated Wild Animals" by ScratchIO.) There's a **Send wildlife** button too.
+- A deer wanders through by day, stopping to graze; at night a fox trots along the verge under the lamps. Cars brake and wait for anything crossing in front of them. (Animal sprites: CC0, "Animated Wild Animals" by ScratchIO.) There's a **Send wildlife** button too.
 - By day, small flocks of birds fly in, sit on the wire for a few minutes, then fly off.
 
 ### Two monitors
