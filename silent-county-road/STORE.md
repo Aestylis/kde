@@ -6,7 +6,7 @@ A quiet pixel-art winter road that follows the real time of day, with a tiny sno
 
 ### Description
 
-A procedural pixel-art winter road with two old streetlamps, a leaning utility pole, buried fence posts, snow and fog. Everything is drawn by a single GPU shader. No images or textures.
+A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader. No images or textures.
 
 The wallpaper follows the real time of day. Sunrise, sunset and the sun's position are calculated from your latitude and longitude. The scene changes between hand-picked palettes for night, dawn, day and dusk, with cold blue nights, rose mornings, clear winter days and mauve evenings.
 
@@ -58,7 +58,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire.
+**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED).
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 

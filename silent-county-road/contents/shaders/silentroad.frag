@@ -336,8 +336,11 @@ void main() {
     // ---------------- UTILITY POLES + WIRES (a line of poles receding to the vanishing point)
     vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.22, 0.20, 0.19));
     vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.22, 0.20, 0.19));
-    for (int k = 0; k < 7; k++) {
+    float prevX = 1e9;
+    for (int k = 0; k < 30; k++) {                               // enough poles to reach the vanishing point
         Pole P = pole(k);
+        if (prevX - P.base.x < 2.0 * px1) break;                 // closer than 2 px apart: they'd merge into a blob
+        prevX = P.base.x;
         if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
             float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
             if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1) col = poleCol;
@@ -345,8 +348,9 @@ void main() {
         if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
         if (k == 0 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + 1.2 * e))
             col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
-        if (k < 6) {                                              // two wires to the next pole
+        if (k < 29) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
+            if (P.base.x - Q.base.x < 2.0 * px1) continue;
             float sag = 0.035 * (P.t + Q.t) / 0.55;
             if (onWire(p, P.armL, Q.armL, sag) || onWire(p, P.armR, Q.armR, sag)) col = wireCol;
         }
@@ -376,6 +380,23 @@ void main() {
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
     col = mix(col, fogCol, clamp(fog, 0.0, 0.75));
+
+    // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
+    for (int i = 0; i < 2; i++) {
+        float tl = i == 0 ? 0.058 : 0.034;
+        float side = i == 0 ? -1.0 : 1.0;                       // sodium on the left verge, LED across the road
+        float gy = HZ - tl * HZ;
+        float lx = roadCx(gy) + side * (roadHw(gy) * 1.25 + 0.004);
+        float topY = gy + 0.64 * tl * 1.25;
+        vec2 head = vec2(lx - side * 0.18 * tl, topY - px1 * 0.5);
+        float on = lamps * (lampAge < 6.0 + float(i) * 2.0 ? step(0.5, hash11(floor(lampAge * 8.0) + 17.0 + float(i) * 5.0)) * smoothstep(0.0, 1.0, lampAge - float(i)) : 1.0);
+        vec3 lc = i == 0 ? vec3(1.0, 0.72, 0.38) : vec3(0.86, 0.92, 1.0);
+        if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25));
+        if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) col = DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25));
+        float dh = length((p - head) / px1);
+        col += lc * on * (exp(-dh * 0.55) * 0.55 + exp(-length(vec2((p.x - head.x) / (0.03 * tl / 0.055), (p.y - gy) / (0.008 * tl / 0.055)))) * 0.25);
+        if (dh < 0.75) col = mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), lc, on);
+    }
 
     // ---------------- PLOUGH (drawn after the fog: it is close to the camera; seen from behind, driving away up the road; amber beacon on the cab)
     float beaconGlow = 0.0;
