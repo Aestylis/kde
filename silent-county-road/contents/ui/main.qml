@@ -76,6 +76,71 @@ WallpaperItem {
     }
     function smooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
+    // ------------------------------------------------------------------ traffic
+    // Deterministic from the clock (5-minute slots), so every screen and every restart agrees on what passed when.
+    function rnd(k, salt) {
+        var x = Math.imul((k | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(salt, 0x27d4eb2d)
+        x ^= x >>> 15; x = Math.imul(x, 0x2c1b3c6d); x ^= x >>> 12; x = Math.imul(x, 0x297a2d39); x ^= x >>> 15
+        return (x >>> 0) / 4294967296
+    }
+    readonly property int slotSec: 300
+    function trafficChance(hour) {               // busy commutes, sparse small hours
+        if (hour >= 1 && hour < 5) return 0.10
+        if ((hour >= 6 && hour < 9) || (hour >= 16 && hour < 19)) return 0.62
+        if (hour >= 22 || hour < 1) return 0.22
+        return 0.42
+    }
+    function vehicleIn(k) {                      // the vehicle of slot k (or null)
+        var d = new Date(k * slotSec * 1000)
+        var hour = previewHour >= 0 ? previewHour : d.getHours()
+        if (rnd(k, 1) > trafficChance(hour)) return null
+        var dur = 22 + rnd(k, 3) * 14
+        return { start: k * slotSec + rnd(k, 2) * (slotSec - dur - 5), dur: dur,
+                 dir: rnd(k, 4) < 0.5 ? 1 : -1, type: Math.floor(rnd(k, 5) * 3), col: Math.floor(rnd(k, 6) * 5) }
+    }
+    function updateTraffic() {
+        var now = Date.now() / 1000
+        var k = Math.floor(now / slotSec)
+        var v = vehicleIn(k), active = null
+        if (v && now >= v.start && now <= v.start + v.dur) active = v
+        fx.veh = active ? Qt.vector4d((now - active.start) / active.dur, active.dir, active.type, active.col) : Qt.vector4d(-1, 0, 0, 0)
+        // ruts from vehicles in the last ~45 minutes, refilling with snow over ~10 minutes
+        var tr = 0, tl = 0
+        for (var j = 0; j <= 9; j++) {
+            var u = vehicleIn(k - j)
+            if (!u) continue
+            var age = now - (u.start + u.dur)
+            if (age < 0) continue
+            var st = Math.exp(-age / 600)
+            if (u.dir > 0) tr = Math.max(tr, st); else tl = Math.max(tl, st)
+        }
+        fx.tracks = Qt.vector4d(tr, tl, 0, 0)
+    }
+
+    // ------------------------------------------------------------------ birds
+    // 8-minute slots; a flock (3-7) may arrive by day / dusk, perch 1-4 minutes, then leave.
+    readonly property int birdSlot: 480
+    function flockIn(k) {
+        var start = k * birdSlot + rnd(k, 21) * 60
+        var sp = sunPosition(new Date(start * 1000))
+        if (sp.elev < -4 || rnd(k, 22) > 0.55) return null
+        return { start: start, n: 3 + Math.floor(rnd(k, 23) * 5), side: rnd(k, 24) < 0.5 ? 1 : -1,
+                 perch: 60 + rnd(k, 25) * 180, seed: k % 997 }
+    }
+    function updateBirds() {
+        var now = Date.now() / 1000
+        if (previewHour >= 0) {                        // keep the preview's sun: shift "now" to the preview hour
+            var d = sceneDate(); now = d.getTime() / 1000
+        }
+        var k = Math.floor(now / birdSlot), f = null
+        for (var j = 0; j <= 1 && !f; j++) {
+            var c = flockIn(k - j)
+            if (c && now >= c.start && now < c.start + c.perch + 22) f = c
+        }
+        fx.birds = f ? Qt.vector4d(now - f.start, f.n, f.side, f.perch) : Qt.vector4d(-1, 0, 0, 0)
+        fx.birdSeed = f ? f.seed : 0
+    }
+
     // real lunar phase: days since a known new moon (2000-01-06 18:14 UTC) over the synodic month
     function moonPhaseNow() {
         var days = (Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000
@@ -159,6 +224,10 @@ WallpaperItem {
         property real plough: -1
         property real sunX: 0.5
         property real sunElev: -20
+        property vector4d veh: Qt.vector4d(-1, 0, 0, 0)
+        property vector4d tracks: Qt.vector4d(0, 0, 0, 0)
+        property vector4d birds: Qt.vector4d(-1, 0, 0, 0)
+        property real birdSeed: 0
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
     }
@@ -177,7 +246,7 @@ WallpaperItem {
         interval: Math.round(1000 / Math.max(5, main.fps))
         running: true
         repeat: true
-        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update() }
+        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds() } }
     }
     Timer {                                   // the day moves slowly: sun, lamps, snow timeline every 2 s
         interval: 2000

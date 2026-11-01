@@ -12,6 +12,9 @@
 //          and grows snow caps; `roadCover` is snow lying on the road itself
 //   DAY    `day` 0..1 / `twi` 0..1 / `rising` re-light the whole scene from the real sun: night -> blue hour -> rose
 //          dawn or orange dusk -> overcast winter day. Lamps switch off by day and stutter back on at dusk.
+//   TRAFFIC cars, pickups and vans in either direction (lanes, perspective speed); headlights / tail lights at
+//          night; tyre tracks in the road snow that fill back in over ~10 minutes
+//   BIRDS  by day a small flock flies in, perches on the wire for a few minutes (the odd hop), then leaves
 //   PLOUGH once each morning a small plough with an amber beacon crawls up the road, leaving ploughed lanes.
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -35,6 +38,10 @@ layout(std140, binding = 0) uniform buf {
     float plough;    // <0 none, 0..1 progress of the plough from the bottom of the screen to the horizon
     float sunX;      // sun position across the screen (0..1 of width) and its elevation in degrees
     float sunElev;
+    vec4 veh;        // active vehicle: progress 0..1 (<0 none), dir (+1 away / -1 toward), type 0 car 1 pickup 2 van, colour 0..4
+    vec4 tracks;     // tyre-track strength: x = right lane (away), y = left lane (toward)
+    vec4 birds;      // x = seconds since the flock's event began (<0 none), y = count, z = arrival side (+1 right / -1 left), w = perch seconds
+    float birdSeed;
     vec2 res;        // item size
 };
 
@@ -243,6 +250,7 @@ void main() {
         snow = mix(snow, snow * glow * 1.25, twi * 0.35);                           // snow takes the dawn/dusk colour
         float cx = roadCx(p.y), hw = roadHw(p.y);
         float dx = abs(p.x - cx) / max(hw, 1e-4);
+        float sdx = (p.x - cx) / max(hw, 1e-4);
         // road: slightly darker, smoother snow; edge softens through the night
         // snow lying on the road: the plough clears everything closer than itself
         float rc = roadCover;
@@ -255,6 +263,17 @@ void main() {
         float lane = smoothstep(0.10, 0.0, abs(dx - 0.5)) * 0.6 + smoothstep(0.06, 0.0, abs(dx)) * -0.35;
         bare *= 1.0 - 0.18 * lane;
         snow = mix(snow, mix(bare, snowRoad, smoothstep(0.0, 0.45, rc)), road);
+        // tyre tracks: two ruts per lane, darker packed snow; old tracks fade as snow refills them
+        float trR = tracks.x, trL = tracks.y;
+        if (veh.x >= 0.0 && veh.x <= 1.0) {                      // the active vehicle lays its ruts as it goes
+            float tvv = veh.y > 0.0 ? 1.0 / (1.0 + 9.0 * veh.x) : 1.15 / (10.0 - 9.0 * veh.x);
+            if (veh.y > 0.0 && t > tvv) trR = 1.0;
+            if (veh.y < 0.0 && t < tvv) trL = 1.0;
+        }
+        float rut = 0.0;
+        rut = max(rut, trR * max(smoothstep(0.045, 0.0, abs(sdx - 0.12)), smoothstep(0.045, 0.0, abs(sdx - 0.36))));
+        rut = max(rut, trL * max(smoothstep(0.045, 0.0, abs(sdx + 0.12)), smoothstep(0.045, 0.0, abs(sdx + 0.36))));
+        snow = mix(snow, snow * 0.80, rut * smoothstep(0.08, 0.5, rc) * road);
         // snowbanks: lighter ridges along both edges, a bit taller as snow builds
         float bank = exp(-pow((dx - 1.12) / (0.07 + 0.05 * e), 2.0));
         snow += DN(vec3(0.05, 0.055, 0.06), vec3(0.06, 0.06, 0.06)) * bank * (0.6 + 0.6 * max(e, 1.0 - rc)) * (0.4 + t);
@@ -357,6 +376,100 @@ void main() {
     }
     col += vec3(0.95, 0.62, 0.25) * beaconGlow * 0.55;
 
+    // ---------------- TRAFFIC (one vehicle at a time; drawn over the fog but faded by it with distance)
+    bool exact = false;
+    vec3 exactCol = vec3(0.0);
+    if (veh.x >= 0.0 && veh.x <= 1.0) {
+        bool away = veh.y > 0.0;
+        // perspective: constant speed in distance, so fast up close and slow near the horizon
+        float tv = away ? 1.0 / (1.0 + 9.0 * veh.x) : 1.15 / (10.0 - 9.0 * veh.x);
+        float yb = HZ - tv * HZ;
+        float hwv = 0.003 + tv * 0.26;
+        float cxv = VP.x + tv * (A * 0.47 - VP.x) + 0.05 * A * tv * tv;
+        float xc = cxv + (away ? 1.0 : -1.0) * hwv * 0.24;
+        int vtype = int(veh.z + 0.5);
+        int vcol = int(veh.w + 0.5);
+        vec3 body = vcol == 0 ? vec3(0.52, 0.13, 0.12) : vcol == 1 ? vec3(0.16, 0.22, 0.40) : vcol == 2 ? vec3(0.62, 0.64, 0.67)
+                  : vcol == 3 ? vec3(0.90, 0.91, 0.92) : vec3(0.20, 0.32, 0.24);
+        float shade = mix(0.30, 1.0, day) + 0.5 * clamp(L, 0.0, 1.0);
+        float wv = max(hwv * 0.50, px1 * 3.0);
+        float hv = wv * (vtype == 2 ? 0.95 : vtype == 1 ? 0.72 : 0.62);
+        float dxv = abs(p.x - xc), dyv = p.y - yb;
+        float lowerH = vtype == 2 ? hv : hv * 0.5;
+        vec3 glass = mix(vec3(0.05, 0.06, 0.08), vec3(0.55, 0.62, 0.70), day);
+        if (dyv > 0.0 && dyv < lowerH && dxv < wv * 0.5) {
+            exact = true; exactCol = body * shade;
+            if (dyv < max(px1, hv * 0.10)) exactCol = vec3(0.08, 0.08, 0.09);                     // bumper
+            if (vtype == 2 && dyv > hv * 0.55 && dyv < hv * 0.82 && dxv < wv * 0.38) exactCol = glass;   // van windows
+        }
+        if (vtype != 2 && dyv >= lowerH && dyv < hv && dxv < wv * (vtype == 1 ? 0.34 : 0.40)) {
+            exact = true; exactCol = body * shade * 0.9;                                           // cabin
+            if (dyv > lowerH + (hv - lowerH) * 0.2 && dyv < hv - (hv - lowerH) * 0.15 && dxv < wv * (vtype == 1 ? 0.27 : 0.33)) exactCol = glass;
+        }
+        bool lightRow = dyv > hv * 0.12 && dyv < hv * 0.30;
+        bool corner = dxv > wv * 0.5 - max(px1, wv * 0.15) && dxv < wv * 0.5;
+        bool lit = lamps > 0.5;
+        if (lightRow && corner) {
+            exact = true;
+            if (away) { if (lit) tail = true; else exactCol = vec3(0.32, 0.09, 0.08) * shade; }
+            else exactCol = lit ? vec3(1.0, 0.97, 0.86) : vec3(0.70, 0.72, 0.74) * shade;
+        }
+        if (exact && !tail) exactCol = mix(exactCol, fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tv) * 0.9);
+        if (lit && p.y < HZ) {
+            // oncoming: beams fan out down the road toward you; going away: a faint pool ahead of it
+            float dist = away ? p.y - yb : yb - p.y;
+            if (dist > 0.0) {
+                float wbeam = wv * 0.45 + dist * (away ? 0.45 : 0.85);
+                float beam = smoothstep(wbeam, wbeam * 0.4, abs(p.x - xc)) * exp(-dist * (away ? 14.0 : 5.0)) * (away ? 0.35 : 0.9);
+                col += vec3(0.92, 0.90, 0.80) * beam * 0.55;
+                L += beam;
+            }
+            float glare = away ? 0.0 : exp(-length((p - vec2(xc, yb + hv * 0.2)) / vec2(wv * 0.9, hv * 0.6)) * 2.5) * 0.35;
+            col += vec3(1.0, 0.97, 0.88) * glare;
+        }
+    }
+
+    // ---------------- BIRDS on the wire (the near crossarm -> far pole wire)
+    if (birds.x >= 0.0) {
+        vec2 wa = vec2(A * 0.70 + 0.02 - 0.05, 0.835), wb = vec2(VP.x + 0.124, HZ + 0.106);
+        float tB = birds.x;
+        for (int i = 0; i < 7; i++) {
+            if (float(i) >= birds.y) break;
+            float hi = hash11(birdSeed * 13.1 + float(i) * 7.3);
+            float hj = hash11(birdSeed * 5.7 + float(i) * 3.1);
+            // perch spot along the wire (spread out, a little clumped), plus an occasional hop
+            float sp = 0.18 + 0.64 * fract(hi + float(i) * 0.137);
+            float arrive = 7.0 + float(i) * 0.9 + hj * 2.0;
+            float leave = birds.w + float(i) * 1.3 + hi * 4.0;
+            float hops = floor(max(tB - arrive, 0.0) / (25.0 + hj * 30.0));
+            sp = clamp(sp + 0.025 * (hash11(hops + hi * 50.0) - 0.5) * min(hops, 1.0), 0.1, 0.9);
+            vec2 perch = vec2(mix(wa.x, wb.x, sp), mix(wa.y, wb.y, sp) - 0.035 * 4.0 * sp * (1.0 - sp) + px1 * 1.0);
+            vec2 bp; bool flying = true;
+            if (tB < arrive) {                                    // flying in along a falling arc from the side
+                float u = clamp(tB / arrive, 0.0, 1.0);
+                vec2 from = vec2(birds.z > 0.0 ? A + 0.05 : -0.05, perch.y + 0.18 + hi * 0.15);
+                bp = mix(from, perch, u) + vec2(0.0, 0.10 * sin(3.14159 * u));
+            } else if (tB < leave) { bp = perch; flying = false; }
+            else {                                                // leaving: up and away to the other side
+                float u = clamp((tB - leave) / 6.0, 0.0, 1.0);
+                vec2 to = vec2(birds.z > 0.0 ? -0.08 : A + 0.08, perch.y + 0.30 + hj * 0.2);
+                bp = mix(perch, to, u * u) + vec2(0.0, 0.05 * u);
+                if (u >= 1.0) continue;
+            }
+            vec2 d = (p - bp) / px1;                                    // in art pixels
+            vec3 bc = DN(vec3(0.03, 0.035, 0.05), vec3(0.11, 0.11, 0.12));
+            if (!flying) {
+                if ((abs(d.x) < 1.0 && d.y > -0.5 && d.y < 1.5) || (abs(d.x - 0.9) < 0.5 && d.y > 1.5 && d.y < 2.5)) col = bc;   // body + head
+            } else {
+                bool up = fract(time * 6.0 + hi) < 0.5;                 // two-frame wing flap
+                bool hit = abs(d.x) < 0.6 && abs(d.y) < 0.6;
+                hit = hit || (abs(abs(d.x) - 1.0) < 0.5 && abs(d.y - (up ? 1.0 : 0.0)) < 0.5);
+                hit = hit || (up && abs(abs(d.x) - 2.0) < 0.5 && abs(d.y - 1.6) < 0.5);
+                if (hit) col = bc;
+            }
+        }
+    }
+
     // ---------------- WIND mood: smooth offset whose slope changes like weather
     float wind = windAmt * (time * 0.8 + 70.0 * noise1(time / 75.0) + 25.0 * noise1(time / 23.0) + 140.0 * pow(noise1(time / 140.0 + 9.0), 4.0));
 
@@ -393,5 +506,5 @@ void main() {
         col = mix(col, fc, vis);
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : quantize(col, q), 1.0) * qt_Opacity;
+    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : quantize(col, q), 1.0) * qt_Opacity;
 }

@@ -19,6 +19,8 @@ The wallpaper follows the real time of day. Sunrise, sunset and the sun's positi
 - A **Send the plough** button lets you trigger it manually.
 - Wind shifts between calm, drifting and gusty conditions.
 - Snowfall comes and goes in patches.
+- Now and then a car, pickup or van passes in either direction, with headlights or tail lights at night. Its tyre tracks slowly fill back in with snow.
+- By day, small flocks of birds fly in, sit on the wire for a few minutes, then fly off.
 
 ### Two monitors
 
@@ -48,13 +50,15 @@ Install from:
 
 Or manually:
 
-`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-1.1.tar.gz`
+`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-1.2.tar.gz`
 
 ### Source
 
 https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
+
+**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire.
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 
@@ -63,9 +67,9 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 ### Other fields
 
 **Category:** Plasma 6 Wallpaper Plugins
-**Version:** 1.1
+**Version:** 1.2
 **Licence:** MIT
 **Homepage / source:** https://github.com/Aestylis/kde/tree/main/silent-county-road
-**File:** `dist/silent-county-road-1.1.tar.gz` (run `./build.sh`)
+**File:** `dist/silent-county-road-1.2.tar.gz` (run `./build.sh`)
 
 **Screenshots:** `screenshots/1-night.png` through `screenshots/6-sky-day.png`
