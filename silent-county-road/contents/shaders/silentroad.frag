@@ -14,6 +14,7 @@
 //          dawn or orange dusk -> overcast winter day. Lamps switch off by day and stutter back on at dusk.
 //   TRAFFIC cars, pickups and vans in either direction (lanes, perspective speed); headlights / tail lights at
 //          night; tyre tracks in the road snow that fill back in over ~10 minutes
+//   WIRES  snow ridges build on the wires overnight; through the late morning sections shed it in falling clumps
 //   BIRDS  by day a small flock flies in, perches on the wire for a few minutes (the odd hop), then leaves
 //   PLOUGH once each morning a small plough with an amber beacon crawls up the road, leaving ploughed lanes.
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -42,6 +43,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 tracks;     // tyre-track strength: x = right lane (away), y = left lane (toward)
     vec4 birds;      // x = seconds since the flock's event began (<0 none), y = count, z = arrival side (+1 right / -1 left), w = perch seconds
     float birdSeed;
+    float wireSnow;  // 0..1 snow lying on the wires
+    float meltStart; // clock second (same base as `time`) when wires start shedding today; meltDur = shedding window
+    float meltDur;
     vec2 res;        // item size
 };
 
@@ -140,6 +144,11 @@ bool onWire(vec2 p, vec2 a, vec2 b, float sag) {
     float slope = (b.y - a.y) / dxab - sag * 4.0 * (1.0 - 2.0 * s) / dxab;
     return abs(p.y - y) < px1 * min(0.5 * sqrt(1.0 + slope * slope), 3.0);
 }
+// height of the sagging wire at x, and how far along the span (0..1) x is
+float wireY(float x, vec2 a, vec2 b, float sag, out float s) {
+    s = (x - a.x) / (b.x - a.x);
+    return mix(a.y, b.y, s) - sag * 4.0 * s * (1.0 - s);
+}
 
 // spruce silhouette: cell grid along x, returns 1 inside a tree; tip = 1 on snowy tier tips
 float spruces(vec2 p, float baseY, float cw, float hMin, float hMax, float seed, float gapX, float gapW, out float tip) {
@@ -184,6 +193,30 @@ float spruce(vec2 p, float baseY, float cx, float h, float seed, inout float tip
 
 // distance (in pixels) to a segment
 float segPx(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) / px1; }
+
+// Snow on a wire: a ridge on top (2 px on near, heavy spans), shed section by section through the late morning; the
+// section that just dropped falls as a clump that breaks into a puff (near spans only).
+void snowOnWire(inout vec3 col, vec2 p, vec2 a, vec2 b, float sag, float span, float w, bool near) {
+    if (wireSnow <= 0.12 && meltStart <= -1.0) return;
+    if (p.x < min(a.x, b.x) || p.x > max(a.x, b.x)) return;
+    float sw; float yw = wireY(p.x, a, b, sag, sw);
+    float seg = floor(sw * 14.0);
+    float hs = hash11(seg * 7.13 + span * 13.31 + w * 3.77);
+    float since = mod(time - meltStart + 43200.0, 86400.0) - 43200.0 - hs * meltDur;   // s since this section dropped
+    bool fallen = meltStart > -1.0 && since > 0.0;
+    float thick = (near && wireSnow > 0.6) ? 2.0 : 1.0;
+    if (!fallen && wireSnow > 0.12 && p.y > yw + 0.5 * px1 && p.y < yw + (0.5 + thick) * px1)
+        col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));
+    if (near && meltStart > -1.0 && since > 0.0 && since < 1.6 && wireSnow > 0.12) {
+        float cy = yw - 0.30 * since * since;                                          // gravity
+        float spread = since * 2.5;                                                     // px: the clump breaks up
+        vec2 dd = vec2(p.x - (a.x + (seg + 0.5) / 14.0 * (b.x - a.x)), p.y - cy) / px1;
+        if (abs(dd.x) < 1.0 + spread && abs(dd.y) < 1.0 + spread * 0.6) {
+            float hp = hash11(floor(dd.x) * 3.1 + floor(dd.y) * 7.7 + seg + span * 11.0);
+            if (hp > 0.35 + 0.12 * spread) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.95, 0.96, 0.97));
+        }
+    }
+}
 
 // lamp light at p: ground pool + cone + halo. head = lamp head position, g = ground y under it, k = strength
 float lampLight(vec2 p, vec2 head, float g, float k, out float halo) {
@@ -353,11 +386,15 @@ void main() {
             if (P.base.x - Q.base.x < 2.0 * px1) continue;
             float sag = 0.035 * (P.t + Q.t) / 0.55;
             if (onWire(p, P.armL, Q.armL, sag) || onWire(p, P.armR, Q.armR, sag)) col = wireCol;
+            snowOnWire(col, p, P.armL, Q.armL, sag, float(k), 0.0, k < 3);
+            snowOnWire(col, p, P.armR, Q.armR, sag, float(k), 1.0, k < 3);
         }
     }
     {   // and back toward the viewer, off the right edge
         Pole P = pole(0);
         if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06)) col = wireCol;
+        snowOnWire(col, p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05, 40.0, 1.0, true);
+        snowOnWire(col, p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06, 41.0, 0.0, true);
     }
 
     // ---------------- STREETLAMPS (posts, arms, heads)

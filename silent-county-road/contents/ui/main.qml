@@ -175,8 +175,9 @@ WallpaperItem {
 
         // snow timeline
         var e = 0, cover = 0, plough = -1
+        var wire = 0, meltStart = -2                       // wire snow; meltStart < -1 = not shedding
         if (erosionMode === 1) { e = 0; cover = 0 }
-        else if (erosionMode === 2) { e = 1; cover = 1 }
+        else if (erosionMode === 2) { e = 1; cover = 1; wire = 1 }
         else {
             var nightLen = times.rise + 1440 - times.set
             var since = m >= times.set ? m - times.set : m + 1440 - times.set   // minutes since last sunset
@@ -186,9 +187,14 @@ WallpaperItem {
                 var peak = smooth(0, nightLen * 0.62, P + 1440 - times.set)
                 e = peak * (1 - smooth(P, P + 180, m))
                 cover = 0.03 + 0.12 * smooth(P + 60, times.set, m)
+                // wires keep last night's snow, shedding it in sections from ~1 h after sunrise over ~4 h
+                wire = peak
+                var nowLocalSec = m * 60
+                meltStart = ((clockSeconds() - (nowLocalSec - (times.rise + 60) * 60)) % 86400 + 86400) % 86400
             } else {
                 e = build
                 cover = build
+                wire = build
                 if (m >= P && m < P + 2) plough = (m - P) / 2                    // the plough's two minutes
             }
         }
@@ -197,6 +203,8 @@ WallpaperItem {
         if (forcedPloughMs > 0 && fp >= 0 && fp <= 1) { plough = fp; cover = 1; e = Math.max(e, 0.35) }
         else if (forcedPloughMs > 0 && fp > 1 && fp < 1.5) cover = Math.min(cover, 0.03)   // stays clear a while after
         fx.erosion = e
+        fx.wireSnow = wire
+        fx.meltStart = meltStart
         fx.roadCover = cover
         fx.plough = plough
     }
@@ -228,6 +236,9 @@ WallpaperItem {
         property vector4d tracks: Qt.vector4d(0, 0, 0, 0)
         property vector4d birds: Qt.vector4d(-1, 0, 0, 0)
         property real birdSeed: 0
+        property real wireSnow: 0
+        property real meltStart: -2
+        property real meltDur: 4 * 3600
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
     }

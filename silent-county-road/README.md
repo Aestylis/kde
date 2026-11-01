@@ -13,6 +13,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 - Real sunrise / sunset / sun position for your latitude and longitude; hand-picked palettes for night, dawn, day, dusk
 - Snow in three depth layers, mostly visible in the lamplight at night; patchy, drifting snowfall and wind moods
 - Occasional traffic in both directions: headlights or tail lights at night, tyre tracks that fill back in
+- Snow builds on the power lines overnight and falls off in clumps through the late morning
 - By day, flocks of birds land on the wire for a few minutes, then fly off
 - Streetlamps off by day, stuttering on at dusk, occasionally flickering (the far one is dying)
 - Snow builds on the road overnight; ~25 min after sunrise a plough with an amber beacon clears it
