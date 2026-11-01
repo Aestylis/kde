@@ -436,13 +436,13 @@ void main() {
         float yb = HZ - tv * HZ;
         float hwv = 0.003 + tv * 0.26;
         float cxv = VP.x + tv * (A * 0.47 - VP.x) + 0.05 * A * tv * tv;
-        float xc = cxv + (away ? 1.0 : -1.0) * hwv * 0.24;
+        float xc = cxv + (away ? 1.0 : -1.0) * hwv * 0.48;                      // centre of its lane
         int vtype = int(veh.z + 0.5);
         int vcol = int(veh.w + 0.5);
         vec3 body = vcol == 0 ? vec3(0.52, 0.13, 0.12) : vcol == 1 ? vec3(0.16, 0.22, 0.40) : vcol == 2 ? vec3(0.62, 0.64, 0.67)
                   : vcol == 3 ? vec3(0.90, 0.91, 0.92) : vec3(0.20, 0.32, 0.24);
         float shade = mix(0.30, 1.0, day) + 0.5 * clamp(L, 0.0, 1.0);
-        float wv = max(hwv * 0.50, px1 * 3.0);
+        float wv = max(hwv * 0.72, px1 * 2.0);                               // a car fills ~70% of its lane (lane = half the road)
         float hv = wv * (vtype == 2 ? 0.95 : vtype == 1 ? 0.72 : 0.62);
         float dxv = abs(p.x - xc), dyv = p.y - yb;
         float lowerH = vtype == 2 ? hv : hv * 0.5;
