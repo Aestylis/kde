@@ -466,11 +466,15 @@ void main() {
     }
 
     // ---------------- UTILITY POLES + WIRES (a line of poles receding to the vanishing point)
-    vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.21, 0.205, 0.21));
-    vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.21, 0.205, 0.21));
+    vec3 poleBase = DN(vec3(0.04, 0.045, 0.06), vec3(0.21, 0.205, 0.21));
+    vec3 wireBase = DN(vec3(0.06, 0.07, 0.09), vec3(0.21, 0.205, 0.21));
     for (int k = 0; k < 64; k++) {                               // all the way into the vanishing point
         Pole P = pole(k);
         if (P.top.y - P.base.y < 1.5 * px1) break;                // shorter than ~1.5 px: gone into the distance
+        float fade = smoothstep(0.10, 0.012, P.t) * 0.9;           // far poles and wires dissolve into the horizon haze
+        if (fade > 0.86) break;
+        vec3 poleCol = mix(poleBase, hazeCol, fade);
+        vec3 wireCol = mix(wireBase, hazeCol, fade);
         if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
             float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
             if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) col = poleCol;
@@ -481,14 +485,15 @@ void main() {
         if (k < 63) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
             float sag = 0.035 * (P.t + Q.t) / 0.55;
-            if (onWire(p, P.armL, Q.armL, sag) || onWire(p, P.armR, Q.armR, sag)) col = wireCol;
+            bool single = (P.armR.x - P.armL.x) < 2.0 * px1;          // the two wires would merge: draw just one
+            if (onWire(p, P.armL, Q.armL, sag) || (!single && onWire(p, P.armR, Q.armR, sag))) col = wireCol;
             snowOnWire(col, p, P.armL, Q.armL, sag, float(k), 0.0, k < 3);
             snowOnWire(col, p, P.armR, Q.armR, sag, float(k), 1.0, k < 3);
         }
     }
     {   // and back toward the viewer, off the right edge
         Pole P = pole(0);
-        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06)) col = wireCol;
+        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06)) col = wireBase;
         snowOnWire(col, p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05, 40.0, 1.0, true);
         snowOnWire(col, p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06, 41.0, 0.0, true);
     }
