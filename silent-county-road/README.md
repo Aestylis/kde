@@ -27,8 +27,8 @@ From Plasma: *Desktop and Wallpaper → Get New Plugins…* and search for **Sil
 From source:
 
 ```
-git clone https://github.com/Aestylis/silent-county-road
-kpackagetool6 -t Plasma/Wallpaper -i silent-county-road      # upgrade later with -u
+git clone https://github.com/Aestylis/kde
+kpackagetool6 -t Plasma/Wallpaper -i kde/silent-county-road      # upgrade later with -u
 ```
 
 Then pick **Silent County Road** under *Desktop and Wallpaper → Wallpaper type*.

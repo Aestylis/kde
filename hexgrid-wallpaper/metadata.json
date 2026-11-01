@@ -7,7 +7,7 @@
     "Description": "Animated hex grid: a drifting black/grey/orange gradient where neighbouring hexes slide past each other and swap places. From the Unraid hexgrid-theme.",
     "Icon": "preferences-desktop-wallpaper",
     "License": "MIT",
-    "Website": "https://github.com/Aestylis/unraid-starfield",
+    "Website": "https://github.com/Aestylis/kde/tree/main/hexgrid-wallpaper",
     "Authors": [{ "Name": "Aestylis" }]
   },
   "X-Plasma-API-Minimum-Version": "6.0",
