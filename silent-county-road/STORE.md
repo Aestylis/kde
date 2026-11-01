@@ -21,6 +21,7 @@ The wallpaper follows the real time of day. Sunrise, sunset and the sun's positi
 - Snowfall comes and goes in patches.
 - Now and then a car, pickup or van passes in either direction, with headlights or tail lights at night. Its tyre tracks slowly fill back in with snow.
 - Snow builds up on the power lines overnight and drops off in clumps through the late morning.
+- A deer wanders through by day, stopping to graze; at night a raccoon shuffles past, its eyes catching the lamplight. There's a **Send wildlife** button too.
 - By day, small flocks of birds fly in, sit on the wire for a few minutes, then fly off.
 
 ### Two monitors
@@ -37,7 +38,7 @@ About 1 to 3% of one CPU core. Rendering is handled by the GPU at the pixel-art 
 
 ### Settings
 
-Scene, pixel size, frame rate, snow, fog, wind, lamp flicker, winter mode, latitude and longitude, hour preview, and Send the plough.
+Scene, pixel size, frame rate, snow, fog, wind, lamp flicker, winter mode, latitude and longitude, hour preview, Send the plough and Send wildlife.
 
 Winter mode can follow the day, stay clear, or stay buried.
 
@@ -59,7 +60,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**1.2:** Passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); three depth layers of trees with atmospheric perspective and sun-facing lighting; cloud shadows drifting across the snow; rendering at pixel-art resolution for much lower GPU use.
+**1.2:** Wildlife (a deer by day, a raccoon by night); passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); three depth layers of trees with atmospheric perspective and sun-facing lighting; cloud shadows drifting across the snow; rendering at pixel-art resolution for much lower GPU use.
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 

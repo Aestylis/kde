@@ -141,6 +141,55 @@ WallpaperItem {
         fx.birdSeed = f ? f.seed : 0
     }
 
+    // ------------------------------------------------------------------ wildlife
+    // 20-minute slots; a deer by day (and dawn/dusk), a raccoon at night. Real-world speed and size by depth.
+    readonly property int animalSlot: 1200
+    readonly property string animalNow: main.configuration.animalNow || ""
+    property real forcedAnimalStart: 0
+    onAnimalNowChanged: { var t = parseInt(animalNow); if (t > 0 && Math.abs(Date.now() - t) < 10 * 60000) forcedAnimalStart = Date.now() / 1000 }
+    function animalEvent(k, start) {
+        var A = Math.max(1, width / Math.max(1, height))
+        var sp = sunPosition(previewHour >= 0 ? sceneDate() : new Date(start * 1000))
+        var raccoon = sp.elev < -6
+        if (!raccoon && sp.elev < -3) return null                  // deep dusk: neither
+        var depth = raccoon ? 0.55 + 0.35 * rnd(k, 42) : 0.16 + 0.30 * rnd(k, 42)
+        var mps = raccoon ? 0.7 : 1.1
+        var v = mps * 0.168 * depth                                  // uv per second (1 m = 0.168 t)
+        var dist = A + 0.3
+        var walk = dist / v
+        var p1 = 7 + rnd(k, 45) * 6, p2 = 7 + rnd(k, 46) * 6
+        return { start: start, raccoon: raccoon, depth: depth, dir: rnd(k, 43) < 0.5 ? 1 : -1, v: v, A: A,
+                 walk: walk, p1: p1, p2: p2, total: walk + p1 + p2, buck: rnd(k, 44) < 0.5 ? 1 : 0 }
+    }
+    function updateAnimal() {
+        var now = Date.now() / 1000, ev = null
+        if (forcedAnimalStart > 0 && now - forcedAnimalStart < 400) {
+            ev = animalEvent(Math.floor(forcedAnimalStart), forcedAnimalStart)
+            if (ev && now > ev.start + ev.total) { ev = null; forcedAnimalStart = 0 }
+        }
+        if (!ev) {
+            var k = Math.floor(now / animalSlot)
+            for (var j = 0; j <= 1 && !ev; j++) {
+                var kk = k - j
+                if (rnd(kk, 41) > 0.35) continue
+                var c = animalEvent(kk, kk * animalSlot + rnd(kk, 40) * 300)
+                if (c && now >= c.start && now <= c.start + c.total) ev = c
+            }
+        }
+        if (!ev) { fx.animal = Qt.vector4d(-99, 0, 0, 0); return }
+        // walk a third, pause (graze / sniff), walk a third, pause, walk out
+        var e = now - ev.start, w1 = ev.walk * 0.33, w2 = ev.walk * 0.33
+        var walked, pause = 0
+        if (e < w1) walked = e
+        else if (e < w1 + ev.p1) { walked = w1; pause = Math.min(1, Math.min(e - w1, w1 + ev.p1 - e)) }
+        else if (e < w1 + ev.p1 + w2) walked = e - ev.p1
+        else if (e < w1 + ev.p1 + w2 + ev.p2) { walked = w1 + w2; var e2 = e - (w1 + ev.p1 + w2); pause = Math.min(1, Math.min(e2, ev.p2 - e2)) }
+        else walked = e - ev.p1 - ev.p2
+        var x0 = ev.dir > 0 ? -0.15 : ev.A + 0.15
+        fx.animal = Qt.vector4d(x0 + ev.dir * walked * ev.v, ev.depth, ev.dir, ev.raccoon ? 1 : 0)
+        fx.animal2 = Qt.vector4d(walked * 2 * Math.PI * (ev.raccoon ? 2.2 : 1.5), pause, ev.buck, 0)   // steps only while walking
+    }
+
     // real lunar phase: days since a known new moon (2000-01-06 18:14 UTC) over the synodic month
     function moonPhaseNow() {
         var days = (Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000
@@ -239,6 +288,8 @@ WallpaperItem {
         property real wireSnow: 0
         property real meltStart: -2
         property real meltDur: 4 * 3600
+        property vector4d animal: Qt.vector4d(-99, 0, 0, 0)
+        property vector4d animal2: Qt.vector4d(0, 0, 0, 0)
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
         // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:
@@ -262,7 +313,7 @@ WallpaperItem {
         interval: Math.round(1000 / Math.max(5, main.fps))
         running: true
         repeat: true
-        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds() } }
+        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds(); main.updateAnimal() } }
     }
     Timer {                                   // the day moves slowly: sun, lamps, snow timeline every 2 s
         interval: 2000

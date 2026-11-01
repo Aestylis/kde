@@ -21,6 +21,7 @@ Kirigami.FormLayout {
     property real cfg_longitude: -123.39
     property int cfg_previewHour: -1
     property string cfg_ploughNow: ""
+    property string cfg_animalNow: ""
 
     QQC2.ComboBox {
         id: sceneCombo
@@ -94,5 +95,11 @@ Kirigami.FormLayout {
         text: i18n("Send the plough (runs ~2 min after Apply)")
         icon.name: "media-playback-start"
         onClicked: root.cfg_ploughNow = String(Date.now())
+    }
+    QQC2.Button {
+        Kirigami.FormData.label: i18n("Wildlife:")
+        text: i18n("Send wildlife (a deer by day, a raccoon at night)")
+        icon.name: "media-playback-start"
+        onClicked: root.cfg_animalNow = String(Date.now())
     }
 }

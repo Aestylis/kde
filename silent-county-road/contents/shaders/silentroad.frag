@@ -15,6 +15,7 @@
 //   TRAFFIC cars, pickups and vans in either direction (lanes, perspective speed); headlights / tail lights at
 //          night; tyre tracks in the road snow that fill back in over ~10 minutes
 //   WIRES  snow ridges build on the wires overnight; through the late morning sections shed it in falling clumps
+//   WILDLIFE a deer wanders through by day (grazing pauses), a raccoon by night (eyeshine in the lights)
 //   BIRDS  by day a small flock flies in, perches on the wire for a few minutes (the odd hop), then leaves
 //   PLOUGH once each morning a small plough with an amber beacon crawls up the road, leaving ploughed lanes.
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -46,6 +47,8 @@ layout(std140, binding = 0) uniform buf {
     float wireSnow;  // 0..1 snow lying on the wires
     float meltStart; // clock second (same base as `time`) when wires start shedding today; meltDur = shedding window
     float meltDur;
+    vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 raccoon)
+    vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
     vec2 res;        // item size
 };
 
@@ -254,6 +257,53 @@ void snowOnWire(inout vec3 col, vec2 p, vec2 a, vec2 b, float sag, float span, f
     }
 }
 
+// ---- wildlife: procedural side-view animals in local units (u along the body, v up), scaled by depth
+bool ell(vec2 q, vec2 c, vec2 r) { vec2 d = (q - c) / r; return dot(d, d) < 1.0; }
+bool seg(vec2 q, vec2 a, vec2 b, float w) { vec2 pa = q - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) < w; }
+// returns 0 nothing, 1 body, 2 dark (legs/mask), 3 light (belly/face/tail), 4 eye
+int deerPix(vec2 q, float L, float H, float ph, float graze, bool buck, float px) {
+    float lw = max(px * 0.55, 0.035 * L);
+    // legs: diagonal pairs swing together
+    for (int i = 0; i < 4; i++) {
+        float hx = (i < 2 ? -0.27 : 0.24) * L + (i % 2 == 0 ? 0.0 : 0.05 * L);
+        float sw = sin(ph + (i == 0 || i == 3 ? 0.0 : 3.14159)) * 0.09 * L;
+        if (seg(q, vec2(hx, 0.47 * H), vec2(hx + sw, 0.0), lw)) return (i % 2 == 0) ? 1 : 2;
+    }
+    if (ell(q, vec2(-0.36 * L, 0.70 * H), vec2(0.05 * L, 0.06 * H))) return 3;                 // white tail
+    if (ell(q, vec2(0.0, 0.60 * H), vec2(0.36 * L, 0.16 * H))) return q.y < 0.52 * H ? 3 : 1;   // body + pale belly
+    vec2 nb = vec2(0.27 * L, 0.64 * H);
+    vec2 ht = mix(vec2(0.40 * L, 0.90 * H), vec2(0.47 * L, 0.10 * H), graze);                  // head up / grazing
+    if (seg(q, nb, ht, 0.07 * L)) return 1;                                                      // neck
+    vec2 dir = normalize(vec2(1.0, mix(-0.35, -1.6, graze)));
+    if (ell(q, ht, vec2(0.075 * L, 0.055 * H))) return 1;                                       // head
+    if (ell(q, ht + dir * 0.08 * L, vec2(0.05 * L, 0.03 * H))) return 2;                        // snout
+    vec2 ear = ht + vec2(-0.03 * L, mix(0.07, 0.05, graze) * H);
+    if (ell(q, ear, vec2(0.025 * L, 0.04 * H)) || ell(q, ear + vec2(-0.045 * L, 0.0), vec2(0.022 * L, 0.035 * H))) return 1;
+    if (buck && graze < 0.5) {                                                                   // small antlers
+        vec2 a0 = ht + vec2(-0.01 * L, 0.05 * H);
+        if (seg(q, a0, a0 + vec2(-0.03 * L, 0.13 * H), px * 0.55) || seg(q, a0 + vec2(-0.02 * L, 0.08 * H), a0 + vec2(0.04 * L, 0.12 * H), px * 0.55)) return 2;
+    }
+    return 0;
+}
+int raccoonPix(vec2 q, float L, float H, float ph, float sniff, float px) {
+    float lw = max(px * 0.55, 0.05 * L);
+    for (int i = 0; i < 4; i++) {
+        float hx = (i < 2 ? -0.20 : 0.14) * L + (i % 2 == 0 ? 0.0 : 0.05 * L);
+        float sw = sin(ph * 1.4 + (i == 0 || i == 3 ? 0.0 : 3.14159)) * 0.06 * L;
+        if (seg(q, vec2(hx, 0.30 * H), vec2(hx + sw, 0.0), lw)) return 2;
+    }
+    // ringed tail
+    vec2 tc = vec2(-0.43 * L, 0.48 * H);
+    if (ell(q, tc, vec2(0.17 * L, 0.13 * H))) return (fract((q.x - tc.x) / (0.07 * L)) < 0.5) ? 2 : 1;
+    if (ell(q, vec2(0.0, 0.50 * H), vec2(0.30 * L, 0.30 * H))) return 1;                         // body
+    vec2 hc = vec2(0.34 * L, mix(0.55, 0.25, sniff) * H);
+    if (ell(q, hc + vec2(0.10 * L, -0.04 * H), vec2(0.06 * L, 0.07 * H))) return 3;              // pale snout
+    if (ell(q, hc + vec2(0.035 * L, 0.03 * H), vec2(0.035 * L, 0.035 * H))) return 4;            // eye (in the mask)
+    if (ell(q, hc, vec2(0.12 * L, 0.18 * H))) return abs(q.y - hc.y - 0.03 * H) < 0.06 * H ? 2 : 3;   // head with black mask band
+    if (ell(q, hc + vec2(-0.05 * L, 0.17 * H), vec2(0.03 * L, 0.06 * H))) return 1;               // ear
+    return 0;
+}
+
 // lamp light at p: ground pool + cone + halo. head = lamp head position, g = ground y under it, k = strength
 float lampLight(vec2 p, vec2 head, float g, float k, float strength, out float halo) {   // k = perspective size
     vec2 d = p - head;
@@ -442,6 +492,27 @@ void main() {
     for (int i = 0; i < 5; i++) {
         float tT = (HZ - RIGHT[i].y) / HZ, tp, tr;
         if (tT > zTree && spruceT(p, RIGHT[i].y, A - RIGHT[i].x, RIGHT[i].z, float(i) * 7.9 + 2.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(A - RIGHT[i].x, tT, true) }
+    }
+
+    // ---------------- WILDLIFE (depth-tested against the trees; hazed by distance; exact colours like the vehicles)
+    bool aniEx = false; vec3 aniCol = vec3(0.0);
+    if (animal.x > -50.0 && animal.y > zTree) {
+        float ta = animal.y, gy = HZ - ta * HZ;
+        bool raccoon = animal.w > 0.5;
+        float aL = raccoon ? 0.13 * ta : 0.29 * ta, aH = raccoon ? 0.065 * ta : 0.25 * ta;  // real size: ~1 m = 0.168 t
+        vec2 q = vec2((p.x - animal.x) * animal.z, p.y - gy);                              // mirror for direction
+        if (q.y >= 0.0 && q.y < aH * 1.25 && abs(q.x) < aL * 0.75) {
+            int k = raccoon ? raccoonPix(q, aL, aH, animal2.x, animal2.y, px1) : deerPix(q, aL, aH, animal2.x, animal2.y, animal2.z > 0.5, px1);
+            if (k > 0) {
+                vec3 c;
+                if (raccoon) c = k == 1 ? vec3(0.40, 0.40, 0.42) : k == 2 ? vec3(0.10, 0.10, 0.11) : k == 3 ? vec3(0.78, 0.78, 0.76) : vec3(0.05, 0.05, 0.05);
+                else         c = k == 1 ? vec3(0.47, 0.34, 0.22) : k == 2 ? vec3(0.22, 0.16, 0.11) : vec3(0.82, 0.76, 0.66);
+                c *= mix(0.30, 1.0, day);                                                  // dim at night ...
+                c += c * clamp(L, 0.0, 1.0) * 1.2;                       // ... lifted by lamplight
+                if (raccoon && k == 4 && L > 0.12) c = vec3(0.95, 0.98, 0.70);   // eyeshine
+                aniCol = mix(c, hazeCol, pow(clamp(1.0 - ta / 0.42, 0.0, 1.0), 1.4) * 0.8); aniEx = true;
+            }
+        }
     }
 
     // ---------------- FENCE (right verge, receding to the vanishing point; buried through the night)
@@ -733,5 +804,5 @@ void main() {
         col = mix(col, fc, vis);
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : quantize(col, q), 1.0) * qt_Opacity;
+    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : quantize(col, q), 1.0) * qt_Opacity;
 }
