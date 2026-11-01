@@ -142,7 +142,7 @@ WallpaperItem {
     }
 
     // ------------------------------------------------------------------ wildlife
-    // 20-minute slots; a deer by day (and dawn/dusk), a raccoon at night. Real-world speed and size by depth.
+    // 20-minute slots; a deer by day (and dawn/dusk), a fox at night. Real-world speed and size by depth (road scale: 1 m = 0.087 t).
     readonly property int animalSlot: 1200
     readonly property string animalNow: main.configuration.animalNow || ""
     property real forcedAnimalStart: 0
@@ -150,15 +150,15 @@ WallpaperItem {
     function animalEvent(k, start) {
         var A = Math.max(1, width / Math.max(1, height))
         var sp = sunPosition(previewHour >= 0 ? sceneDate() : new Date(start * 1000))
-        var raccoon = sp.elev < -6
-        if (!raccoon && sp.elev < -3) return null                  // deep dusk: neither
-        var depth = raccoon ? 0.55 + 0.35 * rnd(k, 42) : 0.16 + 0.30 * rnd(k, 42)
-        var mps = raccoon ? 0.7 : 1.1
-        var v = mps * 0.168 * depth                                  // uv per second (1 m = 0.168 t)
+        var fox = sp.elev < -6
+        if (!fox && sp.elev < -3) return null                      // deep dusk: neither
+        var depth = fox ? 0.50 + 0.40 * rnd(k, 42) : 0.24 + 0.36 * rnd(k, 42)
+        var mps = fox ? 0.9 : 1.1
+        var v = mps * 0.087 * depth                                  // uv per second
         var dist = A + 0.3
         var walk = dist / v
         var p1 = 7 + rnd(k, 45) * 6, p2 = 7 + rnd(k, 46) * 6
-        return { start: start, raccoon: raccoon, depth: depth, dir: rnd(k, 43) < 0.5 ? 1 : -1, v: v, A: A,
+        return { start: start, fox: fox, stride: fox ? 0.75 : 1.4, depth: depth, dir: rnd(k, 43) < 0.5 ? 1 : -1, v: v, A: A,
                  walk: walk, p1: p1, p2: p2, total: walk + p1 + p2, buck: rnd(k, 44) < 0.5 ? 1 : 0 }
     }
     function updateAnimal() {
@@ -186,8 +186,9 @@ WallpaperItem {
         else if (e < w1 + ev.p1 + w2 + ev.p2) { walked = w1 + w2; var e2 = e - (w1 + ev.p1 + w2); pause = Math.min(1, Math.min(e2, ev.p2 - e2)) }
         else walked = e - ev.p1 - ev.p2
         var x0 = ev.dir > 0 ? -0.15 : ev.A + 0.15
-        fx.animal = Qt.vector4d(x0 + ev.dir * walked * ev.v, ev.depth, ev.dir, ev.raccoon ? 1 : 0)
-        fx.animal2 = Qt.vector4d(walked * 2 * Math.PI * (ev.raccoon ? 2.2 : 1.5), pause, ev.buck, 0)   // steps only while walking
+        fx.animal = Qt.vector4d(x0 + ev.dir * walked * ev.v, ev.depth, ev.dir, ev.fox ? 1 : 0)
+        // walk cycle advances with distance walked (one cycle per stride), so the feet don't slide
+        fx.animal2 = Qt.vector4d(2 * Math.PI * (walked * ev.v / (0.087 * ev.depth)) / ev.stride, pause, ev.buck, 0)
     }
 
     // real lunar phase: days since a known new moon (2000-01-06 18:14 UTC) over the synodic month
@@ -260,8 +261,16 @@ WallpaperItem {
 
     Rectangle { anchors.fill: parent; color: "#07090d" }
 
+    Image {                                   // CC0 wildlife sprites (contents/images/CREDITS.md)
+        id: wildlifeAtlas
+        source: Qt.resolvedUrl("../images/wildlife.png")
+        visible: false
+        smooth: false
+    }
+
     ShaderEffect {
         id: fx
+        property var atlas: wildlifeAtlas
         anchors.fill: parent
         property real time: main.clockSeconds()
         // block size in PHYSICAL pixels, so a scaled monitor gets the same-size pixels as an unscaled one

@@ -98,7 +98,7 @@ Kirigami.FormLayout {
     }
     QQC2.Button {
         Kirigami.FormData.label: i18n("Wildlife:")
-        text: i18n("Send wildlife (a deer by day, a raccoon at night)")
+        text: i18n("Send wildlife (a deer by day, a fox at night)")
         icon.name: "media-playback-start"
         onClicked: root.cfg_animalNow = String(Date.now())
     }
