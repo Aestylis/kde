@@ -296,12 +296,12 @@ void main() {
     float e = erosion;
 
     // ---------------- LIGHT (two streetlamps along the left verge)
-    // every lamp follows one perspective rule (depth t): post 0.04 t off the verge, height 0.64 t, arm 0.14 t
+    // every lamp follows one perspective rule (depth t): post 0.11 t back from the verge, height 0.64 t, arm 0.19 t
     float lt1 = 0.50, lt2 = 0.1125;
     float g1 = HZ - lt1 * HZ, g2 = HZ - lt2 * HZ;
-    float post1 = roadCx(g1) - roadHw(g1) - 0.04 * lt1, post2 = roadCx(g2) - roadHw(g2) - 0.04 * lt2;
-    vec2 lamp1 = vec2(post1 + 0.14 * lt1, g1 + 0.64 * lt1);
-    vec2 lamp2 = vec2(post2 + 0.14 * lt2, g2 + 0.64 * lt2);
+    float post1 = roadCx(g1) - roadHw(g1) - 0.11 * lt1, post2 = roadCx(g2) - roadHw(g2) - 0.11 * lt2;
+    vec2 lamp1 = vec2(post1 + 0.19 * lt1, g1 + 0.64 * lt1);
+    vec2 lamp2 = vec2(post2 + 0.19 * lt2, g2 + 0.64 * lt2);
     float f1 = mix(1.0, flicker(time, 3.0, 90.0, 0.35 * max(flickerAmt, 1.0)), min(flickerAmt, 1.0));           // near lamp: rare stutters
     float f2 = mix(1.0, flicker(time + 7.0, 11.0, 40.0, 0.40 * max(flickerAmt, 1.0)), min(flickerAmt, 1.0));    // far lamp: dying, more often
     // switched off by day; on switch-on they stutter for a few seconds before settling
@@ -539,9 +539,9 @@ void main() {
         float tl = i == 0 ? 0.058 : 0.034;
         float side = i == 0 ? -1.0 : 1.0;                       // sodium on the left verge, LED across the road
         float gy = HZ - tl * HZ;
-        float lx = roadCx(gy) + side * (roadHw(gy) + 0.04 * tl);
+        float lx = roadCx(gy) + side * (roadHw(gy) + 0.11 * tl);
         float topY = gy + 0.64 * tl;
-        vec2 head = vec2(lx - side * 0.14 * tl, topY - px1 * 0.5);
+        vec2 head = vec2(lx - side * 0.19 * tl, topY - px1 * 0.5);
         float on = lamps * (lampAge < 6.0 + float(i) * 2.0 ? step(0.5, hash11(floor(lampAge * 8.0) + 17.0 + float(i) * 5.0)) * smoothstep(0.0, 1.0, lampAge - float(i)) : 1.0);
         vec3 lc = i == 0 ? vec3(1.0, 0.72, 0.38) : vec3(0.86, 0.92, 1.0);
         if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25));
