@@ -71,35 +71,39 @@ float bayer4(vec2 q) {
 // ---- palettes: one hand-picked 16-colour set per phase; the active palette blends between them each frame
 //      (night <-> day by sun height, then toward dusk or dawn during twilight); entries 16-19 are each phase's sky blues.
 //      PAL_TAIL is reserved for the plough.
-const vec3 PAL_NIGHT[20] = vec3[20](
+const vec3 PAL_NIGHT[21] = vec3[21](
     vec3(0.027, 0.035, 0.051), vec3(0.051, 0.067, 0.094), vec3(0.075, 0.098, 0.145), vec3(0.106, 0.133, 0.192),
     vec3(0.137, 0.173, 0.239), vec3(0.176, 0.216, 0.286), vec3(0.227, 0.271, 0.349), vec3(0.290, 0.337, 0.420),
     vec3(0.369, 0.416, 0.502), vec3(0.463, 0.510, 0.604), vec3(0.580, 0.627, 0.714), vec3(0.765, 0.796, 0.847),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
-    vec3(0.050, 0.070, 0.140), vec3(0.080, 0.110, 0.220), vec3(0.120, 0.170, 0.320), vec3(0.200, 0.270, 0.450));
-const vec3 PAL_DAY[20] = vec3[20](
-    vec3(0.100, 0.120, 0.120), vec3(0.160, 0.200, 0.190), vec3(0.220, 0.200, 0.190), vec3(0.300, 0.330, 0.360),
+    vec3(0.050, 0.070, 0.140), vec3(0.080, 0.110, 0.220), vec3(0.120, 0.170, 0.320), vec3(0.200, 0.270, 0.450),
+    vec3(0.070, 0.090, 0.100));
+const vec3 PAL_DAY[21] = vec3[21](
+    vec3(0.100, 0.120, 0.120), vec3(0.160, 0.200, 0.190), vec3(0.205, 0.210, 0.220), vec3(0.300, 0.330, 0.360),
     vec3(0.400, 0.440, 0.480), vec3(0.480, 0.520, 0.570), vec3(0.580, 0.630, 0.690), vec3(0.660, 0.710, 0.770),
     vec3(0.740, 0.780, 0.830), vec3(0.820, 0.850, 0.890), vec3(0.890, 0.910, 0.940), vec3(0.950, 0.960, 0.970),
     vec3(0.550, 0.330, 0.140), vec3(0.800, 0.520, 0.200), vec3(0.450, 0.460, 0.480), vec3(1.000, 0.800, 0.450),
-    vec3(0.300, 0.460, 0.740), vec3(0.420, 0.580, 0.830), vec3(0.560, 0.690, 0.880), vec3(0.700, 0.800, 0.930));
-const vec3 PAL_DUSK[20] = vec3[20](
+    vec3(0.300, 0.460, 0.740), vec3(0.420, 0.580, 0.830), vec3(0.560, 0.690, 0.880), vec3(0.700, 0.800, 0.930),
+    vec3(0.270, 0.340, 0.280));
+const vec3 PAL_DUSK[21] = vec3[21](
     vec3(0.050, 0.050, 0.090), vec3(0.090, 0.090, 0.150), vec3(0.140, 0.130, 0.210), vec3(0.200, 0.180, 0.280),
     vec3(0.280, 0.240, 0.340), vec3(0.380, 0.300, 0.380), vec3(0.500, 0.380, 0.420), vec3(0.640, 0.460, 0.420),
     vec3(0.780, 0.540, 0.380), vec3(0.900, 0.620, 0.360), vec3(0.960, 0.740, 0.480), vec3(0.990, 0.860, 0.640),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
-    vec3(0.080, 0.100, 0.220), vec3(0.130, 0.170, 0.340), vec3(0.200, 0.250, 0.460), vec3(0.300, 0.360, 0.580));
-const vec3 PAL_DAWN[20] = vec3[20](
+    vec3(0.080, 0.100, 0.220), vec3(0.130, 0.170, 0.340), vec3(0.200, 0.250, 0.460), vec3(0.300, 0.360, 0.580),
+    vec3(0.360, 0.260, 0.220));
+const vec3 PAL_DAWN[21] = vec3[21](
     vec3(0.060, 0.060, 0.100), vec3(0.100, 0.110, 0.170), vec3(0.160, 0.170, 0.250), vec3(0.240, 0.250, 0.340),
     vec3(0.340, 0.340, 0.440), vec3(0.460, 0.430, 0.520), vec3(0.600, 0.520, 0.600), vec3(0.740, 0.600, 0.660),
     vec3(0.860, 0.680, 0.660), vec3(0.930, 0.780, 0.700), vec3(0.970, 0.880, 0.800), vec3(0.990, 0.950, 0.900),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
-    vec3(0.090, 0.120, 0.250), vec3(0.150, 0.210, 0.400), vec3(0.240, 0.330, 0.560), vec3(0.380, 0.480, 0.700));
+    vec3(0.090, 0.120, 0.250), vec3(0.150, 0.210, 0.400), vec3(0.240, 0.330, 0.560), vec3(0.380, 0.480, 0.700),
+    vec3(0.300, 0.270, 0.300));
 const vec3 PAL_TAIL = vec3(0.702, 0.235, 0.188);
 vec3 quantize(vec3 c, vec2 q) {
     c += (bayer4(q) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
     float bd = 1e9; vec3 best = vec3(0.0);
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 21; i++) {
         vec3 pc = mix(mix(PAL_NIGHT[i], PAL_DAY[i], day), mix(PAL_DUSK[i], PAL_DAWN[i], rising), twi * 0.85);
         vec3 d = c - pc; float e = dot(d, d * vec3(1.0, 1.25, 0.9));
         if (e < bd) { bd = e; best = pc; }
@@ -199,6 +203,24 @@ float spruce(vec2 p, float baseY, float cx, float h, float seed, inout float tip
     hw = max(hw, px1 * 0.8);
     float jag = (hash11(floor(y / px1) + seed) - 0.5) * px1 * 1.6;   // ragged needles
     if (abs(p.x - cx) < hw + jag) {
+        if (s > 0.88 && abs(p.x - cx) > hw * 0.55) tip = 1.0;
+        return 1.0;
+    }
+    return 0.0;
+}
+
+// spruce with tier information for shading: returns 1 inside; tip = snowy tier end; tier = 0 (base of tier) .. 1 (top)
+float spruceT(vec2 p, float baseY, float cx, float h, float seed, out float tip, out float tier) {
+    tip = 0.0; tier = 0.0;
+    float y = p.y - baseY;
+    if (y < 0.0 || y > h) return 0.0;
+    float tiers = 6.0 + floor(hash11(seed) * 3.0);
+    float s = fract((y / h) * tiers);
+    float hw = (h - y) * 0.27 * (0.60 + 0.40 * (1.0 - s));
+    hw = max(hw, px1 * 0.8);
+    float jag = (hash11(floor(y / px1) + seed) - 0.5) * px1 * 1.6;
+    if (abs(p.x - cx) < hw + jag) {
+        tier = s;
         if (s > 0.88 && abs(p.x - cx) > hw * 0.55) tip = 1.0;
         return 1.0;
     }
@@ -363,19 +385,56 @@ void main() {
         col = snow;
     }
 
-    // ---------------- FAR TREE LINE (fog-tinted) and NEAR SPRUCES (framing)
-    float tip;
+    // ---------------- TREES: far line, middle groves, near framing spruces — depth-sorted, with atmospheric perspective
+    //                  (distance pulls colour toward the horizon sky, contrast drops) and directional light from the sun/moon
+    float zTree = -1.0;                               // depth (t) of the tree drawn at this pixel; larger = nearer
+    vec3 hazeCol = mix(DN(vec3(0.115, 0.14, 0.20), vec3(0.74, 0.80, 0.88)), glow, twi * 0.35);
+    float lightX = (day > 0.35 || twi > 0.25) ? sunX * A : A * 0.66;
+    float lightLow = (day > 0.35 || twi > 0.25) ? 1.0 - clamp(sunElev / 35.0, 0.0, 0.6) : 0.5;   // low light = stronger side lighting
+    vec3 litCol = mix(DN(vec3(0.07, 0.09, 0.10), vec3(0.27, 0.34, 0.28)), glow * 0.55, twi * 0.5);
+    vec3 darkCol = DN(vec3(0.03, 0.035, 0.05), vec3(0.13, 0.17, 0.16));
+    vec3 snowTip = DN(vec3(0.20, 0.23, 0.29), vec3(0.90, 0.92, 0.95));
+    float tip = 0.0, tier = 0.0;
+    // shade one tree pixel at depth t
+    #define SHADE_TREE(cxT, tT, detail) { \
+        float haze = pow(clamp(1.0 - (tT) / 0.42, 0.0, 1.0), 1.4) * 0.80; \
+        float side = sign(p.x - (cxT)) * sign(lightX - (cxT)); \
+        vec3 c = mix(darkCol, litCol, (side > 0.0 ? 0.55 : 0.0) * lightLow + 0.15); \
+        if (detail) c *= 0.90 + 0.16 * tier; \
+        vec3 tc = side > 0.0 ? snowTip : snowTip * mix(0.75, 0.85, day); \
+        c = mix(c, tc, tip * (0.5 + 0.5 * e)); \
+        col = mix(c, hazeCol, haze); zTree = (tT); }
+
+    // far tree line on the horizon (t ~ 0.01)
     float farT = spruces(p, HZ - 0.004, 0.032, 0.035, 0.11, 11.0, VP.x, 0.05, tip);
-    if (farT > 0.5) col = mix(DN(vec3(0.07, 0.085, 0.115), vec3(0.40, 0.46, 0.48)), DN(vec3(0.16, 0.19, 0.24), vec3(0.80, 0.84, 0.88)), tip * (0.5 + 0.5 * e));
-    // framing spruces, hand placed (x from the left edge / right edge, base y, height)
+    if (farT > 0.5) { tier = 0.5; SHADE_TREE(p.x, 0.012, false) }
+    // middle groves: both sides, set back from the road, perspective-scaled (height and offset proportional to t)
+    for (int side = 0; side < 2; side++) {
+        for (int i = 0; i < 12; i++) {
+            float hs = hash11(float(i) * 3.71 + float(side) * 17.3);
+            float tT = 0.07 + 0.17 * hash11(float(i) * 9.13 + float(side) * 5.1);
+            if (tT <= zTree) continue;
+            float gy = HZ - tT * HZ;
+            float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
+            float cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
+            float h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
+            float tp, tr;
+            if (spruceT(p, gy, cxT, h, float(i) * 2.9 + float(side) * 31.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(cxT, tT, true) }
+        }
+    }
+    // near framing spruces, hand placed (x from the left edge / right edge, base y, height)
     const vec3 LEFT[6]  = vec3[6](vec3(0.03, 0.24, 0.66), vec3(0.11, 0.27, 0.50), vec3(0.18, 0.25, 0.72),
                                  vec3(0.27, 0.29, 0.40), vec3(0.34, 0.31, 0.27), vec3(0.075, 0.30, 0.34));
     const vec3 RIGHT[5] = vec3[5](vec3(0.03, 0.23, 0.74), vec3(0.12, 0.26, 0.56), vec3(0.20, 0.28, 0.42),
                                  vec3(0.27, 0.30, 0.30), vec3(0.085, 0.29, 0.36));
-    float ntip = 0.0, nearT = 0.0;
-    for (int i = 0; i < 6; i++) nearT = max(nearT, spruce(p, LEFT[i].y, LEFT[i].x, LEFT[i].z, float(i) * 5.3 + 1.0, ntip));
-    for (int i = 0; i < 5; i++) nearT = max(nearT, spruce(p, RIGHT[i].y, A - RIGHT[i].x, RIGHT[i].z, float(i) * 7.9 + 2.0, ntip));
-    if (nearT > 0.5) col = mix(DN(vec3(0.03, 0.035, 0.05), vec3(0.16, 0.21, 0.19)), DN(vec3(0.20, 0.23, 0.29), vec3(0.88, 0.91, 0.94)), ntip * (0.55 + 0.45 * e));
+    for (int i = 0; i < 6; i++) {
+        float tT = (HZ - LEFT[i].y) / HZ, tp, tr;
+        if (tT > zTree && spruceT(p, LEFT[i].y, LEFT[i].x, LEFT[i].z, float(i) * 5.3 + 1.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(LEFT[i].x, tT, true) }
+    }
+    for (int i = 0; i < 5; i++) {
+        float tT = (HZ - RIGHT[i].y) / HZ, tp, tr;
+        if (tT > zTree && spruceT(p, RIGHT[i].y, A - RIGHT[i].x, RIGHT[i].z, float(i) * 7.9 + 2.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(A - RIGHT[i].x, tT, true) }
+    }
 
     // ---------------- FENCE (right verge, receding to the vanishing point; buried through the night)
     for (int i = 0; i < 9; i++) {
@@ -384,14 +443,14 @@ void main() {
         float x = roadCx(y) + roadHw(y) * 1.32 + 0.01 * t;
         float h = 0.075 * t * (1.0 - 0.55 * e);             // buried
         float w = max(px1 * 1.0, 0.007 * t);
-        if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.22, 0.20, 0.19));
+        if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
         float cap = px1 * (1.0 + 1.5 * e);                  // snow cap grows
         if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
     }
 
     // ---------------- UTILITY POLES + WIRES (a line of poles receding to the vanishing point)
-    vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.22, 0.20, 0.19));
-    vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.22, 0.20, 0.19));
+    vec3 poleCol = DN(vec3(0.04, 0.045, 0.06), vec3(0.21, 0.205, 0.21));
+    vec3 wireCol = DN(vec3(0.06, 0.07, 0.09), vec3(0.21, 0.205, 0.21));
     float prevX = 1e9;
     for (int k = 0; k < 30; k++) {                               // enough poles to reach the vanishing point
         Pole P = pole(k);
@@ -399,7 +458,7 @@ void main() {
         prevX = P.base.x;
         if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
             float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
-            if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1) col = poleCol;
+            if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) col = poleCol;
         }
         if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
         if (k == 0 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + 1.2 * e))
@@ -422,9 +481,9 @@ void main() {
 
     // ---------------- STREETLAMPS (posts, arms, heads)
     vec2 l1b = vec2(lamp1.x - 0.07, g1), l1t = vec2(lamp1.x - 0.07, lamp1.y + 0.01);
-    if (segPx(p, l1b, l1t) < 0.8 || segPx(p, l1t, lamp1 + vec2(0.0, 0.006)) < 0.6) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.22, 0.20, 0.19));
+    if (segPx(p, l1b, l1t) < 0.8 || segPx(p, l1t, lamp1 + vec2(0.0, 0.006)) < 0.6) col = DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21));
     vec2 l2b = vec2(lamp2.x - 0.022, g2), l2t = vec2(lamp2.x - 0.022, lamp2.y + 0.004);
-    if (segPx(p, l2b, l2t) < 0.6 || segPx(p, l2t, lamp2 + vec2(0.0, 0.003)) < 0.5) col = DN(vec3(0.06, 0.065, 0.08), vec3(0.22, 0.20, 0.19));
+    if (segPx(p, l2b, l2t) < 0.6 || segPx(p, l2t, lamp2 + vec2(0.0, 0.003)) < 0.5) col = DN(vec3(0.06, 0.065, 0.08), vec3(0.21, 0.205, 0.21));
     if (length((p - lamp1) / vec2(0.012, 0.006)) < 1.0) col = mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.45, 0.46, 0.48)), vec3(0.95, 0.83, 0.62), f1);
     if (length((p - lamp2) / vec2(0.006, 0.0035)) < 1.0) col = mix(DN(vec3(0.30, 0.24, 0.18), vec3(0.45, 0.46, 0.48)), vec3(0.80, 0.64, 0.42), f2);
     if (abs(p.x - lamp1.x) < 0.012 && p.y > lamp1.y + 0.006 && p.y < lamp1.y + 0.006 + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
