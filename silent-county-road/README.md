@@ -11,6 +11,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 ![Dusk](screenshots/4-dusk.png)
 
 - Three depth layers of spruces with atmospheric perspective (distance fades toward the sky) and sun-facing lighting
+- Cloud shadows drifting across the snowfield, the road and the trees on sunny days
 - Clouds lit by the real sun or moon: sunlit tops, dark undersides, golden edges at sunset
 - Real sunrise / sunset / sun position for your latitude and longitude; hand-picked palettes for night, dawn, day, dusk
 - Snow in three depth layers, mostly visible in the lamplight at night; patchy, drifting snowfall and wind moods

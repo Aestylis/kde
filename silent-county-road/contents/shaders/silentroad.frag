@@ -492,6 +492,21 @@ void main() {
     if (length((p - lamp2) / vec2(0.006, 0.0035)) < 1.0) col = mix(DN(vec3(0.30, 0.24, 0.18), vec3(0.45, 0.46, 0.48)), vec3(0.80, 0.64, 0.42), f2);
     if (abs(p.x - lamp1.x) < 0.012 && p.y > lamp1.y + 0.006 && p.y < lamp1.y + 0.006 + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));
 
+    // ---------------- CLOUD SHADOWS: a drifting cloud layer projected onto the ground plane (and the trees standing on it)
+    {
+        float sunUp = day * smoothstep(2.0, 10.0, sunElev);
+        bool isTree = zTree > 0.0;
+        if (sunUp > 0.01 && (p.y < HZ || isTree)) {
+            float tg = max(isTree ? zTree : roadT(p.y), 0.015);         // depth: shadows shrink and flatten toward the horizon
+            vec2 w = vec2((p.x - VP.x) / tg, 1.0 / tg);                // world position on the ground (lateral, distance)
+            vec2 cp = vec2(w.x * 0.07 + time * 0.010, w.y * 0.22);     // drifts the same way as the sky clouds
+            float n = fbm(cp) * 0.75 + fbm(cp * 2.1 + 5.0) * 0.35;
+            float cov = mix(0.50, 0.40, e);
+            float sh = smoothstep(cov, cov + 0.10, n) * sunUp * (1.0 - 0.6 * smoothstep(0.6, 0.95, e));   // thick overcast: no distinct shadows
+            col = mix(col, col * vec3(0.70, 0.76, 0.92), sh * 0.85);    // shaded snow goes cooler and bluer, not just darker
+        }
+    }
+
     // ---------------- LAMPLIGHT on the scene (snow takes the warm light; dark shapes barely)
     float lum = dot(col, vec3(0.3, 0.5, 0.2));
     col = mix(col, col + warm * 0.55, clamp(L, 0.0, 1.0) * smoothstep(0.08, 0.30, lum));
