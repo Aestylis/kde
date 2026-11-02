@@ -159,6 +159,12 @@ WallpaperItem {
         var k = Math.floor(now / slotSec)
         var active = null
         if (curVeh && now <= curVeh.start + curVeh.dur + curVeh.hold) active = curVeh   // a waiting vehicle may outlast its slot
+        else if (forcedCar) {                                 // "Send a car": a random vehicle right now
+            var r = Math.random()
+            active = { start: now, dur: 22 + 14 * Math.random(), dir: r < 0.5 ? 1 : -1, type: Math.floor(Math.random() * 3),
+                       col: Math.floor(Math.random() * 5), hold: 0 }
+            vehSpeed = 1; forcedCar = false
+        }
         else {
             var v = vehicleIn(k)
             if (v && now >= v.start && now <= v.start + v.dur) { v.hold = 0; active = v; vehSpeed = 1 }
@@ -256,6 +262,9 @@ WallpaperItem {
     // ------------------------------------------------------------------ wildlife
     // 20-minute slots; a deer by day (and dawn/dusk), a fox at night. Real-world speed and size by depth (road scale: 1 m = 0.087 t).
     readonly property int animalSlot: 1200
+    readonly property string carNow: main.configuration.carNow || ""
+    property bool forcedCar: false
+    onCarNowChanged: { var t = parseInt(carNow); if (t > 0 && Math.abs(Date.now() - t) < 10 * 60000) forcedCar = true }
     readonly property string animalNow: main.configuration.animalNow || ""
     property real forcedAnimalStart: 0
     onAnimalNowChanged: { var t = parseInt(animalNow); if (t > 0 && Math.abs(Date.now() - t) < 10 * 60000) forcedAnimalStart = Date.now() / 1000 }

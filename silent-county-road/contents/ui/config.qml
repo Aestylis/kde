@@ -24,6 +24,7 @@ Kirigami.FormLayout {
     property int cfg_previewHour: -1
     property string cfg_ploughNow: ""
     property string cfg_animalNow: ""
+    property string cfg_carNow: ""
 
     QQC2.ComboBox {
         id: sceneCombo
@@ -115,5 +116,11 @@ Kirigami.FormLayout {
         text: i18n("Send wildlife (a deer by day, a fox at night)")
         icon.name: "media-playback-start"
         onClicked: root.cfg_animalNow = String(Date.now())
+    }
+    QQC2.Button {
+        Kirigami.FormData.label: i18n("Traffic:")
+        text: i18n("Send a car (a random vehicle, either direction)")
+        icon.name: "media-playback-start"
+        onClicked: root.cfg_carNow = String(Date.now())
     }
 }
