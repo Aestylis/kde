@@ -409,6 +409,8 @@ WallpaperItem {
         fx.meltStart = meltStart
         fx.roadCover = cover
         fx.plough = plough
+        // which way it drives: alternates by day (toward us one morning, away the next); a forced run picks at random
+        fx.ploughDir = (forcedPloughMs > 0 && fp >= 0 && fp <= 1) ? forcedPloughDir : (Math.floor(Date.now() / 86400000) % 2 === 0 ? 1 : -1)
     }
 
     Rectangle { anchors.fill: parent; color: "#07090d" }
@@ -476,6 +478,7 @@ WallpaperItem {
         property real localHour: 12
         property vector4d belt: Qt.vector4d(-9, 160, 0, 0)
         property vector4d moon: Qt.vector4d(0, -90, 0, 0)
+        property real ploughDir: 1
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
         // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:
@@ -487,9 +490,10 @@ WallpaperItem {
 
     Component.onCompleted: update()
     onPreviewHourChanged: update()
+    property real forcedPloughDir: 1
     onPloughNowChanged: {
         var t = parseInt(ploughNow)
-        if (t > 0 && Math.abs(Date.now() - t) < 10 * 60000) { forcedPloughMs = Date.now(); update() }
+        if (t > 0 && Math.abs(Date.now() - t) < 10 * 60000) { forcedPloughMs = Date.now(); forcedPloughDir = Math.random() < 0.5 ? 1 : -1; update() }
     }
     onErosionModeChanged: update()
     onLatitudeChanged: { times = sunTimes(new Date()); ploughStartMin = times.rise + 25; update() }

@@ -55,6 +55,7 @@ layout(std140, binding = 0) uniform buf {
     float windDir;   // +1 the wind blows left->right on screen, -1 right->left (live weather)
     float liveCloud; // live cloud cover 0..1, or -1 (procedural)
     float liveThick; // live cloud thickness 0.3 (high cirrus veil) .. 1 (low, dense)
+    float ploughDir; // +1 the plough drives away up the road, -1 it comes toward us
     vec4 moon;       // x = azimuth from the view centre (deg, + west / screen-right), y = elevation (deg), z = how lit 0..1
     vec4 belt;       // x = anti-sun point across the screen (0..1 of width, may lie off-screen), y = degrees per screen width
     vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
@@ -528,6 +529,21 @@ bool cvx(vec3 ro, vec3 rd, vec4 pl[7], int cnt, out float tIn, out vec3 nIn) {
     }
     return tIn <= tOut && tIn > 0.0;
 }
+// the plough blade: angled 15 deg (left end forward), 6.4 m wide; its cross-section (forward offset w against height y)
+// curves like a real moldboard: cutting edge forward at the bottom, recessed middle, top curling forward
+vec3 bladeN() { return normalize(vec3(tan(radians(15.0)), 0.0, 1.0)); }
+void plBlade(int f, out vec4 pl[7], out int cnt) {
+    vec3 nb = bladeN(), up = vec3(0.0, 1.0, 0.0);
+    float y0 = f == 0 ? 0.06 : f == 1 ? 0.55 : 1.05, y1 = f == 0 ? 0.55 : f == 1 ? 1.05 : 1.50;
+    float w0 = f == 0 ? 0.30 : f == 1 ? 0.00 : 0.02,  w1 = f == 0 ? 0.00 : f == 1 ? 0.02 : 0.34;
+    float s0 = dot(nb, vec3(0.0, 0.0, 8.80));
+    vec2 n2 = normalize(vec2(y1 - y0, -(w1 - w0)));
+    vec3 n = nb * n2.x + up * n2.y;
+    vec3 pt = nb * (s0 + w0) + up * y0;
+    for (int i = 0; i < 7; i++) pl[i] = vec4(0.0);
+    pl[0] = vec4(n, dot(n, pt)); pl[1] = vec4(-n, -(dot(n, pt) - 0.14));
+    pl[2] = vec4(0, -1, 0, -y0); pl[3] = vec4(0, 1, 0, y1); pl[4] = vec4(-1, 0, 0, 3.20); pl[5] = vec4(1, 0, 0, 3.20); cnt = 6;
+}
 // part k of vehicle type ty (false past the last part); pid names the part for its material rules
 bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
     pid = k; cnt = 0;
@@ -569,26 +585,27 @@ bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
         else if (k <= 8) { float sx = (k == 5 || k == 6) ? -1.0 : 1.0, z0 = (k == 5 || k == 7) ? 0.55 : 3.55;
             boxPl(vec3(min(sx * 0.62, sx * 0.90), 0.0, z0), vec3(max(sx * 0.62, sx * 0.90), 0.64, z0 + 0.62), pl, cnt); }
         else return false;
-    } else if (ty == 3) {                                 // county plough truck: W 1.25, ~9 m with the blade
-        if (k == 0) boxPl(vec3(-1.10, 0.55, 0.00), vec3(1.10, 0.95, 7.30), pl, cnt);       // frame
-        else if (k == 1) boxPl(vec3(-1.25, 0.95, 0.10), vec3(1.25, 2.35, 4.40), pl, cnt);  // dump body
-        else if (k == 2) boxPl(vec3(-1.20, 0.95, 4.60), vec3(1.20, 2.85, 6.60), pl, cnt);  // cab
-        else if (k == 3) boxPl(vec3(-1.05, 0.95, 6.60), vec3(1.05, 2.00, 7.90), pl, cnt);  // hood
-        else if (k == 4) boxPl(vec3(-0.16, 2.85, 5.40), vec3(0.16, 3.07, 5.72), pl, cnt);  // beacon
-        else if (k == 5) {                                // the blade: 6.4 m wide (the road is 6.8), angled 15 deg (left end forward), 1.45 m tall
-            vec3 nb = normalize(vec3(tan(radians(15.0)), 0.0, 1.0));
-            pl[0] = vec4(nb, dot(nb, vec3(0.0, 0.0, 8.90))); pl[1] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 8.70)));
-            pl[2] = vec4(0, -1, 0, -0.06); pl[3] = vec4(0, 1, 0, 1.45); pl[4] = vec4(-1, 0, 0, 3.20); pl[5] = vec4(1, 0, 0, 3.20); cnt = 6;
+    } else if (ty == 3) {                                 // county plough truck (white cab, yellow body, curved orange blade)
+        if (k == 0) boxPl(vec3(-1.10, 0.55, 0.00), vec3(1.10, 0.95, 7.40), pl, cnt);       // frame
+        else if (k == 1) boxPl(vec3(-1.25, 0.95, 0.10), vec3(1.25, 2.40, 4.30), pl, cnt);  // dump body
+        else if (k == 2) boxPl(vec3(-1.18, 0.95, 4.50), vec3(1.18, 2.95, 6.30), pl, cnt);  // cab
+        else if (k == 3) boxPl(vec3(-1.02, 0.95, 6.30), vec3(1.02, 2.05, 8.00), pl, cnt);  // long hood
+        else if (k == 4) boxPl(vec3(-0.70, 2.95, 5.30), vec3(0.70, 3.12, 5.60), pl, cnt);  // beacon light bar on the cab
+        else if (k <= 7) plBlade(k - 5, pl, cnt);                                            // curved moldboard, 3 facets
+        else if (k == 8) boxPl(vec3(-0.60, 0.35, 8.00), vec3(0.60, 0.80, 8.75), pl, cnt);   // push frame
+        else if (k == 9) {                                                                   // snow rolling ahead of the blade
+            vec3 nb = bladeN();
+            pl[0] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 9.05))); pl[1] = vec4(nb, dot(nb, vec3(0.0, 0.0, 9.95)));
+            pl[2] = vec4(0, -1, 0, 0.0); pl[3] = plT(vec3(-0.30, 1.0, 0.0), vec3(1.0, 0.95, 0.0)); pl[4] = vec4(-1, 0, 0, 2.6); pl[5] = vec4(1, 0, 0, 3.7); cnt = 6;
         }
-        else if (k == 6) boxPl(vec3(-0.55, 0.40, 7.90), vec3(0.55, 0.75, 8.75), pl, cnt);   // push frame
-        else if (k == 7) {                                // snow rolling off the trailing (right) end of the blade
-            vec3 nb = normalize(vec3(tan(radians(15.0)), 0.0, 1.0));
-            pl[0] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 8.90))); pl[1] = vec4(nb, dot(nb, vec3(0.0, 0.0, 9.80)));
-            pl[2] = vec4(0, -1, 0, 0.0); pl[3] = plT(vec3(-0.45, 1.0, 0.0), vec3(1.6, 1.25, 0.0)); pl[4] = vec4(-1, 0, 0, -0.4); pl[5] = vec4(1, 0, 0, 3.75); cnt = 6;
-        }
-        else if (k <= 11) { float sx = (k == 8 || k == 9) ? -1.0 : 1.0; bool fr = (k == 8 || k == 10);
-            float z0 = fr ? 6.45 : 0.95, z1 = fr ? 7.45 : 2.35;                            // front axle / dual rear axle
-            boxPl(vec3(min(sx * 0.80, sx * 1.27), 0.0, z0), vec3(max(sx * 0.80, sx * 1.27), 1.02, z1), pl, cnt); }
+        else if (k == 10 || k == 11) { float sx = k == 10 ? -1.0 : 1.0, zr = 8.85 - sx * 3.1 * tan(radians(15.0));   // blade guide rods
+            boxPl(vec3(sx * 3.1 - 0.03, 1.2, zr - 0.03), vec3(sx * 3.1 + 0.03, 2.6, zr + 0.03), pl, cnt); }
+        else if (k == 12) boxPl(vec3(-0.85, 2.25, 7.30), vec3(0.85, 2.42, 7.42), pl, cnt);  // plough lights on the hood
+        else if (k == 13 || k == 14) { float sx = k == 13 ? -1.0 : 1.0;                      // big mirrors
+            boxPl(vec3(min(sx * 1.30, sx * 1.48), 1.95, 6.15), vec3(max(sx * 1.30, sx * 1.48), 2.60, 6.25), pl, cnt); }
+        else if (k <= 18) { float sx = (k == 15 || k == 16) ? -1.0 : 1.0; bool fr = (k == 15 || k == 17);
+            float z0 = fr ? 6.55 : 0.95, z1 = fr ? 7.55 : 2.35;                            // front axle / dual rear axle
+            boxPl(vec3(min(sx * 0.80, sx * 1.27), 0.0, z0), vec3(max(sx * 0.80, sx * 1.27), 1.04, z1), pl, cnt); }
         else return false;
     }
     return true;
@@ -597,7 +614,7 @@ float carLen(int ty) { return ty == 0 ? 4.6 : ty == 1 ? 5.3 : ty == 2 ? 4.9 : 9.
 // nearest hit along the ray (local frame); returns the part id or -1
 int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
     bt = 1e9; bn = vec3(0.0); bp = vec3(0.0); int best = -1;
-    for (int k = 0; k < 14; k++) {
+    for (int k = 0; k < 20; k++) {
         vec4 pl[7]; int cnt, pid;
         if (!carPart(ty, k, pl, cnt, pid)) break;
         float t; vec3 n;
@@ -610,28 +627,35 @@ int carMaterial(int ty, int pid, vec3 P, vec3 n) {
     float ax = abs(P.x), y = P.y;
     bool rear = n.z < -0.5, front = n.z > 0.5, side = abs(n.x) > 0.5;
     if (ty == 3) {
-        if (pid == 0 || pid == 6) return C_GRILLE;                                        // frame, push frame
-        if (pid == 1) {
-            if (rear && ax > 0.90 && y > 1.00 && y < 1.30) return C_LAMP;                 // tail lights
+        if (pid == 0 || pid == 8) return C_GRILLE;                                        // frame, push frame
+        if (pid == 1) {                                                                   // dump body (yellow)
+            if (rear && ax > 0.90 && y > 1.00 && y < 1.30) return C_LAMP;
             if (rear && ax < 0.35 && y > 1.02 && y < 1.20) return C_PLATE;
-            if (rear && abs(y - 1.75) < 0.05) return C_GRILLE;                            // tailgate hinge line
-            if (n.y > 0.9) return C_SNOW;                                                 // snow in the dump body
+            if (rear && abs(y - 1.80) < 0.05) return C_GRILLE;
+            if (n.y > 0.9) return C_SNOW;
             return C_PAINT;
         }
-        if (pid == 2) {
-            if (rear && ax < 0.85 && y > 1.85 && y < 2.55) return C_GLASS;
-            if (side && y > 1.85 && y < 2.55 && P.z > 5.0) return C_GLASS;
-            if (n.y > 0.9) return C_PAINT;
+        if (pid == 2) {                                                                   // cab (white): glass all round
+            if ((front || rear) && ax < 0.98 && y > 1.95 && y < 2.75) return C_GLASS;
+            if (side && y > 1.95 && y < 2.75 && P.z > 4.9) return C_GLASS;
             return C_PAINT;
         }
-        if (pid == 3) return front && ax < 0.70 && y > 1.10 && y < 1.75 ? C_GRILLE : C_PAINT;
-        if (pid == 4) return 8;                                                           // amber beacon
-        if (pid == 5) {                                                                   // blade: orange moldboard, dark ribbed back
+        if (pid == 3) {                                                                   // long hood: grille, headlights
+            if (front && ax < 0.66 && y > 1.10 && y < 1.90) return abs(ax - 0.33) < 0.03 || abs(y - 1.50) < 0.03 ? C_CHROME : C_GRILLE;
+            if (front && ax > 0.72 && y > 1.20 && y < 1.45) return C_LAMP;
+            return C_PAINT;
+        }
+        if (pid == 4) return rear || front || side ? 8 : C_RUBBER;                         // amber beacon bar
+        if (pid >= 5 && pid <= 7) {                                                       // the blade
             if (y < 0.16) return C_RUBBER;                                                // cutting edge
-            if (dot(n, vec3(0.0, 0.0, 1.0)) < 0.0) return fract(P.x * 1.1) < 0.10 ? 9 : C_PAINT;   // painted back, dark vertical bracing ribs
+            if (abs(P.x) < 0.05) return C_RUBBER;                                         // seam between the two sections
+            if (dot(n, bladeN()) < 0.0) return fract(P.x * 1.1) < 0.10 ? 9 : C_PAINT;       // painted back, bracing ribs
             return C_PAINT;
         }
-        if (pid == 7) return C_SNOW;
+        if (pid == 9) return C_SNOW;
+        if (pid == 10 || pid == 11) return fract(y * 3.0) < 0.5 ? C_PAINT : C_RUBBER;     // banded guide rods
+        if (pid == 12) return front ? C_LAMP : C_GRILLE;                                   // plough lights
+        if (pid == 13 || pid == 14) return C_GRILLE;
         return C_RUBBER;
     }
     if (ty == 0) {
@@ -869,7 +893,11 @@ void main() {
         // road: slightly darker, smoother snow; edge softens through the night
         // snow lying on the road: the plough clears everything closer than itself
         float rc = roadCover;
-        if (plough >= 0.0 && t > 1.0 - plough) rc = 0.0;
+        if (plough >= 0.0) {                                      // cleared right where the blade scrapes it up
+            float tpl = max(ploughDir > 0.0 ? 1.0 - plough : plough, 0.004);
+            float tb = WSC / max(WSC / tpl + ploughDir * 4.3, 0.5);
+            if (ploughDir > 0.0 ? t > tb : t < tb) rc = 0.0;
+        }
         float edge = mix(0.04, 0.22, rc);
         float road = 1.0 - smoothstep(1.0 - edge, 1.0 + edge, dx);
         vec3 snowRoad = snow * mix(0.72, 0.93, rc);
@@ -1285,22 +1313,23 @@ void main() {
     vec3 exactCol = vec3(0.0);
     vec2 beaconP = vec2(-9.0);
     if (plough >= 0.0 && plough <= 1.0) {
-        float tp = max(1.0 - plough, 0.004);                       // depth: 1 at the bottom of the screen, 0 at the horizon
+        bool pAway = ploughDir > 0.0;
+        float tp = max(pAway ? 1.0 - plough : plough, 0.004);      // depth: away it starts at the bottom, oncoming at the horizon
         float yb = HZ - tp * HZ;
         float xc = roadCx(yb) + roadHw(yb) * 0.06;
         float Zc = WSC / tp, Xc = (xc - VP.x) * WSC / tp;
-        vec3 org = vec3(Xc, 0.0, Zc - 4.5);
+        vec3 org = vec3(Xc, 0.0, pAway ? Zc - 4.5 : Zc + 4.5);
         float span = 3.6 * tp;                                     // generous: blade half-width (3.2 m) is 0.25 t on screen
         bool on = fract(time * 1.6) < 0.5;
         if (abs(p.x - xc) < span * 0.30 + 4.0 * px1 && p.y > yb - 0.2 * tp && p.y < yb + 0.36 * tp + 3.0 * px1) {
-            vec3 ro, rd; carRay(p, org, true, ro, rd);
+            vec3 ro, rd; carRay(p, org, pAway, ro, rd);
             float ct; vec3 cn, cP;
             int pid = carTrace(3, ro, rd, ct, cn, cP);
             if (pid >= 0) {
                 int cm = carMaterial(3, pid, cP, cn);
-                if (tp > 0.10 && (!carHitAt(3, p + vec2(px1, 0.0), org, true) || !carHitAt(3, p - vec2(px1, 0.0), org, true)
-                               || !carHitAt(3, p + vec2(0.0, px1), org, true))) cm = C_RUBBER;
-                vec3 nw = cn, rdw = rd;
+                if (tp > 0.10 && (!carHitAt(3, p + vec2(px1, 0.0), org, pAway) || !carHitAt(3, p - vec2(px1, 0.0), org, pAway)
+                               || !carHitAt(3, p + vec2(0.0, px1), org, pAway))) cm = C_RUBBER;
+                vec3 nw = pAway ? cn : vec3(-cn.x, cn.y, -cn.z), rdw = pAway ? rd : vec3(-rd.x, rd.y, -rd.z);
                 bool bySunC = day > 0.25 || twi > 0.3;
                 vec2 sh2 = normalize(vec2(sunX * A - VP.x, 1.0));
                 float se = radians(max(sunElev, 2.0));
@@ -1312,21 +1341,24 @@ void main() {
                 light = mix(light, light * glow * 1.4, twi * 0.5);
                 vec3 rf = reflect(rdw, nw);
                 vec3 skyR = mix(DN(vec3(0.05, 0.06, 0.09), vec3(0.42, 0.48, 0.56)), DN(vec3(0.12, 0.15, 0.24), vec3(0.62, 0.74, 0.90)), clamp(rf.y * 2.0, 0.0, 1.0));
-                vec3 orange = vec3(0.86, 0.46, 0.10);
+                vec3 paint = pid == 1 ? vec3(0.92, 0.64, 0.12) : (pid == 2 || pid == 3) ? vec3(0.90, 0.90, 0.88) : vec3(0.95, 0.50, 0.07);   // body / cab / blade
                 vec3 c;
-                if (cm == C_PAINT) c = quantizeRamp(orange * light, orange, q, false, L, hazeCol, fogCol);
+                if (cm == C_PAINT) c = quantizeRamp(paint * light, paint, q, false, L, hazeCol, fogCol);
                 else if (cm == C_GLASS) c = skyR * 0.8;
                 else if (cm == C_GRILLE) c = vec3(0.10, 0.10, 0.11) * (0.7 + 0.5 * kd) + light * 0.03;
                 else if (cm == 9) c = vec3(0.20, 0.20, 0.22) * light;                       // blade back: dark steel
                 else if (cm == C_RUBBER) c = vec3(0.05, 0.05, 0.06);
-                else if (cm == C_LAMP) { tail = lamps > 0.5 || day < 0.6; c = vec3(0.36, 0.08, 0.07) * light; }   // ploughs run with their lights on
+                else if (cm == C_LAMP) {                                                    // ploughs run with their lights on
+                    if (cn.z < -0.5) { tail = true; c = vec3(0.36, 0.08, 0.07); }
+                    else c = vec3(1.0, 0.97, 0.86);
+                }
                 else if (cm == C_PLATE) c = vec3(0.86, 0.86, 0.78) * light;
                 else if (cm == 8) c = on ? vec3(1.0, 0.80, 0.45) : vec3(0.43, 0.33, 0.21);
                 else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * (0.80 + 0.20 * nw.y);   // snow on the blade / in the body
                 exact = true; exactCol = mix(clamp(c, 0.0, 1.0), fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tp) * 0.8);
             }
         }
-        float Eh = HZ * WSC, Zb = Zc + 1.05;                       // beacon: project (X, 3.0 m, cab) onto the screen
+        float Eh = HZ * WSC, Zb = pAway ? Zc + 0.95 : Zc - 0.95;   // beacon bar on the cab: project (X, 3.0 m) onto the screen
         beaconP = vec2(VP.x + Xc / Zb, HZ + (3.0 - Eh) / Zb);
         if (on) beaconGlow = exp(-length((p - beaconP) / vec2(0.09, 0.05)) * 2.2) * (1.0 - 0.7 * day);
     }
