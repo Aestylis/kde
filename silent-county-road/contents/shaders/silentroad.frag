@@ -83,11 +83,14 @@ float windX(float t) {                                  // steady drift + wander
     return windAmt * (t * 2.4 + 41.0 * wnoise(t / 40.0, 7001u) + 5.0 * wnoise(t / 9.0, 9113u));
 }
 // mountain ridgeline height (0..1) at x: ridged noise (sharp crests, soft valleys) under a slow envelope of big and small peaks
-float ridge1(float x, uint salt) { return 1.0 - abs(2.0 * wnoise(x, salt) - 1.0); }
+float ridge1(float x, uint salt) {                     // ridged noise with a rounded crest (smooth abs): shoulders, not spikes
+    float a = 2.0 * wnoise(x, salt) - 1.0, k = 0.22;
+    return 1.0 - (sqrt(a * a + k * k) - k) / (sqrt(1.0 + k * k) - k);
+}
 float ridgeH(float x, uint salt) {                      // ridged multifractal: pointed summits, wide valleys, big + small peaks
     x += 0.55 * (wnoise(x * 0.7, salt + 71u) - 0.5) + 0.18 * (wnoise(x * 2.9, salt + 89u) - 0.5);   // domain warp: uneven spacing, leaning peaks
     float r0 = ridge1(x, salt), r1 = ridge1(x * 2.1 + 5.0, salt + 17u), r2 = ridge1(x * 3.4 + 1.3, salt + 31u);
-    float h = 0.60 * r0 * r0 + 0.28 * r1 * r1 * (0.4 + 0.6 * r0) + 0.12 * r2 * r2 * (0.3 + 0.7 * r0);
+    float h = 0.62 * pow(r0, 1.5) + 0.26 * r1 * r1 * (0.4 + 0.6 * r0) + 0.12 * r2 * r2 * (0.3 + 0.7 * r0);
     return h * (0.30 + 0.70 * smoothstep(0.15, 0.85, wnoise(x * 0.42, salt + 53u)));
 }
 float rockR(vec2 q) {                                   // ridged rock texture: buttresses (1) and gullies (0)
@@ -447,24 +450,38 @@ void main() {
         col += glow * 0.35 * exp(-sunD * 9.0) * (0.4 + twi);
     }
 
-    // ---------------- MOUNTAINS: a hazy, snow-capped far range and a darker forested ridge in front, lit from the
-    //                  sun / moon side (faces follow the crest slope), snow above a ragged snowline and down the gullies,
-    //                  alpenglow at dawn / dusk; drawn after the sky and the low sun, so the sun can set behind a peak
-    if (p.y > HZ - 0.003 && p.y < HZ + 0.43) {
+    // ---------------- MOUNTAINS: three ranges, far -> near; each range's height, roughness, haze, snowline and colour
+    //                  follow from its distance d (0 far .. 1 near). Faces lit from the sun / moon side, a ragged snowline
+    //                  with snow down the gullies, forest below the treeline (spruce spikes along the crests), alpenglow at
+    //                  dawn / dusk. Drawn after the sky and the low sun (the sun can set behind a peak).
+    if (p.y > HZ - 0.003 && p.y < HZ + 0.44) {
         float mLX = (day > 0.35 || twi > 0.25) ? sunX * A : A * 0.66;
         vec3 mHaze = mix(DN(vec3(0.115, 0.14, 0.20), vec3(0.74, 0.80, 0.88)), glow, twi * 0.35);
-        for (int L = 0; L < 2; L++) {
-            float fq = L == 0 ? 1.5 : 2.6, amp = L == 0 ? 0.42 : 0.18;
-            uint salt = L == 0 ? 811u : 2903u;
-            float xo = p.x * fq + (L == 0 ? 11.3 : 47.9);
+        for (int L = 0; L < 3; L++) {
+            float d = float(L) * 0.5;
+            float fq = mix(1.5, 3.2, d), amp = L == 0 ? 0.42 : L == 1 ? 0.24 : 0.15;
+            uint salt = L == 0 ? 811u : L == 1 ? 1777u : 2903u;
+            float xo = p.x * fq + (L == 0 ? 11.3 : L == 1 ? 29.6 : 47.9);
             float h = ridgeH(xo, salt);
             float top = HZ - 0.003 + amp * h;
-            if (p.y > top) continue;
-            // facing: the crest slope smoothed over ~8 px sets the big faces; spurs running down from the crest
-            // (a 2D noise stretched along the fall line) break them into ridges and gullies, each lit on its sunward side
+            float treeline = HZ + amp * mix(0.30, 0.95, d);                               // trees grow below this height
+            float hz = mix(0.44, 0.18, d) * (0.75 + 0.25 * smoothstep(HZ + amp * 0.5, HZ, p.y));   // hazier far away and toward the foot
+            vec3 forest = DN(vec3(0.045, 0.06, 0.08), vec3(0.17, 0.23, 0.22));
+            if (p.y > top) {
+                // spruce spikes standing on the crest (only where the crest is below the treeline)
+                if (L == 0 || top > treeline) continue;
+                float tw = mix(2.0, 3.0, d) * px1;                                        // one tree per cell
+                float cell = floor(p.x / tw);
+                if (hash11(cell * 1.31 + float(L) * 7.7) < 0.25) continue;               // gaps in the trees
+                float th = (2.0 + 3.0 * hash11(cell * 2.17 + float(L))) * mix(0.8, 1.4, d) * px1;
+                float tcx = (cell + 0.5) * tw, dy = p.y - top;
+                if (dy > th || abs(p.x - tcx) > (1.0 - dy / th) * tw * 0.55) continue;
+                col = mix(forest * 0.85, mHaze, hz);
+                continue;
+            }
             float depth = (top - p.y) / amp;                                              // 0 at the crest, grows downhill
-            // rock texture: ridged noise stretched down the fall line -> buttresses and gullies
-            vec2 sq = vec2(p.x * fq * 11.0 + float(L) * 9.1 + depth * 2.5, depth * 6.0 + p.x * fq * 3.0);   // gullies run diagonally downhill
+            // rock texture: ridged noise running diagonally down the fall line -> buttresses and gullies
+            vec2 sq = vec2(p.x * fq * 11.0 + float(L) * 9.1 + depth * 2.5, depth * 6.0 + p.x * fq * 3.0);
             float spur = rockR(sq);
             float gx = rockR(sq + vec2(0.25, 0.0)) - rockR(sq - vec2(0.25, 0.0));        // which way the buttress faces
             // the big faces: crest slope sampled a little off-column (wobbling with depth), so the light divide wavers downhill
@@ -474,16 +491,20 @@ void main() {
             float side = sign(mLX - p.x);
             float lit = clamp(0.5 - slope * side * 0.50 + gx * side * 1.1 + (spur - 0.45) * 0.40, 0.0, 1.0);
             lit = floor(lit * 4.0 + 0.5) / 4.0;                                           // a few flat light steps: rock facets
-            float snowline = HZ + amp * ((L == 0 ? 0.44 : 0.70) + 0.12 * wnoise(xo * 3.0, salt + 7u) - 0.22 * (spur - 0.5));
+            float snowline = HZ + amp * (mix(0.44, 0.88, d) + 0.12 * wnoise(xo * 3.0, salt + 7u) - 0.22 * (spur - 0.5));
             bool snowy = p.y > snowline || (p.y > snowline - amp * 0.25 && spur < 0.30);   // ragged snowline; snow down the gullies
-            vec3 base = L == 0 ? DN(vec3(0.09, 0.11, 0.16), vec3(0.40, 0.45, 0.54)) : DN(vec3(0.05, 0.07, 0.10), vec3(0.22, 0.28, 0.29));
-            vec3 c = base * mix(0.62, 1.18, lit);
-            if (snowy) {
+            vec3 rock = DN(vec3(0.09, 0.11, 0.16), vec3(0.40, 0.45, 0.54));
+            vec3 c = rock * mix(0.62, 1.18, lit);
+            if (L > 0 && p.y < treeline + amp * 0.08 * (spur - 0.5)) {                     // forested slopes: canopy speckle
+                float canopy = hash21(floor(p / px1) + float(L) * 13.0);
+                c = forest * mix(0.70, 1.25, lit) * (0.80 + 0.35 * canopy);
+                if (snowy) c = mix(c, DN(vec3(0.30, 0.34, 0.45), vec3(0.90, 0.92, 0.96)), step(0.62, canopy));   // snow-dusted trees
+            } else if (snowy) {
                 vec3 sn = DN(vec3(0.30, 0.34, 0.45), vec3(0.94, 0.95, 0.98));
                 c = mix(sn * vec3(0.66, 0.72, 0.86), sn, lit);
             }
             c = mix(c, c * glow * 1.5, twi * 0.55 * lit * (1.0 - day * 0.5));           // alpenglow on the lit faces
-            col = mix(c, mHaze, (L == 0 ? 0.42 : 0.26) * (0.75 + 0.25 * smoothstep(HZ + amp * 0.5, HZ, p.y)));   // hazier toward the foot
+            col = mix(c, mHaze, hz);
         }
     }
 
