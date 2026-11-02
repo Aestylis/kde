@@ -393,6 +393,47 @@ float flicker(float t, float seed, float window, float chance) {
     return mix(r < 0.45 ? 0.08 : r < 0.75 ? 0.55 : 1.0, 0.04, dead);
 }
 
+// ---- scene layout tables (shared by drawing and by the cast shadows)
+//                     variant, depth t, lateral offset (world), wall colour
+const vec4 HOUSES[4] = vec4[4](vec4(0.0, 0.150, 2.6, 0.0), vec4(2.0, 0.132, 4.6, 2.0),
+                               vec4(1.0, 0.120, -2.4, 1.0), vec4(3.0, 0.080, -4.6, 3.0));
+// near framing spruces, hand placed (x from the left edge / right edge, base y, height)
+const vec3 LEFT[6]  = vec3[6](vec3(0.03, 0.24, 0.66), vec3(0.11, 0.27, 0.50), vec3(0.18, 0.25, 0.72),
+                             vec3(0.27, 0.29, 0.40), vec3(0.34, 0.31, 0.27), vec3(0.075, 0.30, 0.34));
+const vec3 RIGHT[5] = vec3[5](vec3(0.03, 0.23, 0.74), vec3(0.12, 0.26, 0.56), vec3(0.20, 0.28, 0.42),
+                             vec3(0.27, 0.30, 0.30), vec3(0.085, 0.29, 0.36));
+
+// a middle-grove spruce: both sides of the road, set back, perspective-scaled; false where a house yard keeps it clear
+bool groveTree(int side, int i, out float tT, out float gy, out float cxT, out float h) {
+    float hs = hash11(float(i) * 3.71 + float(side) * 17.3);
+    tT = 0.07 + 0.17 * hash11(float(i) * 9.13 + float(side) * 5.1);
+    gy = HZ - tT * HZ;
+    float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
+    cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
+    h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
+    for (int hI = 0; hI < 4; hI++) {                                        // the yard, and a sight line to it
+        float dT = tT - HOUSES[hI].y, dL = abs(lat - HOUSES[hI].z);
+        if ((abs(dT) < 0.035 && dL < 1.9) || (dT > 0.0 && dT < 0.09 && dL < 0.9)) return false;
+    }
+    return true;
+}
+
+// ---- cast shadows on the ground plane, in world metres. The scene's perspective has focal length 1 (uv) and
+//      1 t ~ 13 m, so a ground pixel at depth t sits at lateral X = (x - VP.x) * WSC / t, distance Z = WSC / t.
+const float WSC = 13.04;
+vec2 groundW(float x, float t) { return vec2((x - VP.x) * WSC / t, WSC / t); }
+// shadow of a vertical caster at c (height H) thrown along dir for length L: kind 0 spruce (cone, crown radius r),
+// 1 house (capsule radius r), 2 pole / post (line, half-width r). pxm = one pixel in metres at this depth (min width).
+bool inShadow(vec2 g, vec2 c, vec2 dir, float L, float r, int kind, float pxm) {
+    vec2 v = g - c;
+    float along = dot(v, dir), perp = abs(dot(v, vec2(-dir.y, dir.x)));
+    if (kind == 1) { float s = clamp(along, 0.0, L); return length(v - dir * s) < r; }
+    if (along < -r || along > L) return false;
+    float s = along / L;
+    float w = kind == 0 ? (s < 0.08 ? 0.25 : r * (1.0 - s) * (0.85 + 0.3 * hash11(floor(along * 1.7) + c.x))) : r;
+    return perp < max(w, 0.5 * pxm);
+}
+
 void main() {
     // coarse pixel grid
     vec2 W = floor(res / pix);
@@ -571,9 +612,6 @@ void main() {
     vec3 darkCol = DN(vec3(0.03, 0.035, 0.05), vec3(0.13, 0.17, 0.16));
     vec3 snowTip = DN(vec3(0.20, 0.23, 0.29), vec3(0.90, 0.92, 0.95));
     float tip = 0.0, tier = 0.0;
-    //                     variant, depth t, lateral offset (world), wall colour
-    const vec4 HOUSES[4] = vec4[4](vec4(0.0, 0.150, 2.6, 0.0), vec4(2.0, 0.132, 4.6, 2.0),
-                                   vec4(1.0, 0.120, -2.4, 1.0), vec4(3.0, 0.080, -4.6, 3.0));
     // shade one tree pixel at depth t
     #define SHADE_TREE(cxT, tT, detail) { \
         float haze = pow(clamp(1.0 - (tT) / 0.42, 0.0, 1.0), 1.4) * 0.80; \
@@ -676,25 +714,13 @@ void main() {
     // middle groves: both sides, set back from the road, perspective-scaled (height and offset proportional to t)
     for (int side = 0; side < 2; side++) {
         for (int i = 0; i < 12; i++) {
-            float hs = hash11(float(i) * 3.71 + float(side) * 17.3);
-            float tT = 0.07 + 0.17 * hash11(float(i) * 9.13 + float(side) * 5.1);
-            if (tT <= zTree) continue;
-            float gy = HZ - tT * HZ;
-            float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
-            bool yard = false;                                                      // keep the house yards clear of trees
-            for (int hI = 0; hI < 4; hI++) { float dT = tT - HOUSES[hI].y, dL = abs(lat - HOUSES[hI].z); if ((abs(dT) < 0.035 && dL < 1.9) || (dT > 0.0 && dT < 0.09 && dL < 0.9)) yard = true; }   // the yard, and a sight line to it
-            if (yard) continue;
-            float cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
-            float h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
+            float tT, gy, cxT, h;
+            if (!groveTree(side, i, tT, gy, cxT, h) || tT <= zTree) continue;
             vec4 tx;
             if (treeSprite(p, gy, cxT, h, float(i) * 2.9 + float(side) * 31.0, tx)) SHADE_SPRITE(cxT, tT, tx)
         }
     }
     // near framing spruces, hand placed (x from the left edge / right edge, base y, height)
-    const vec3 LEFT[6]  = vec3[6](vec3(0.03, 0.24, 0.66), vec3(0.11, 0.27, 0.50), vec3(0.18, 0.25, 0.72),
-                                 vec3(0.27, 0.29, 0.40), vec3(0.34, 0.31, 0.27), vec3(0.075, 0.30, 0.34));
-    const vec3 RIGHT[5] = vec3[5](vec3(0.03, 0.23, 0.74), vec3(0.12, 0.26, 0.56), vec3(0.20, 0.28, 0.42),
-                                 vec3(0.27, 0.30, 0.30), vec3(0.085, 0.29, 0.36));
     for (int i = 0; i < 6; i++) {
         float tT = (HZ - LEFT[i].y) / HZ; vec4 tx;
         if (tT > zTree && treeSprite(p, LEFT[i].y, LEFT[i].x, LEFT[i].z, float(i) * 5.3 + 1.0, tx)) SHADE_SPRITE(LEFT[i].x, tT, tx)
@@ -824,13 +850,54 @@ void main() {
     {
         float sunUp = day * smoothstep(2.0, 10.0, sunElev);
         bool isTree = zTree > 0.0;
-        if (sunUp > 0.01 && (p.y < HZ || isTree)) {
+        if (day * smoothstep(1.0, 6.0, sunElev) > 0.01 && (p.y < HZ || isTree)) {
             float tg = max(isTree ? zTree : roadT(p.y), 0.015);         // depth: shadows shrink and flatten toward the horizon
             vec2 w = vec2((p.x - VP.x) / tg, 1.0 / tg);                // world position on the ground (lateral, distance)
             vec2 cp = vec2(w.x * 0.07 + time * 0.010, w.y * 0.22);     // drifts the same way as the sky clouds
             float n = fbm(cp) * 0.75 + fbm(cp * 2.1 + 5.0) * 0.35;
             float cov = mix(0.50, 0.40, e);
-            float sh = smoothstep(cov, cov + 0.10, n) * sunUp * (1.0 - 0.6 * smoothstep(0.6, 0.95, e));   // thick overcast: no distinct shadows
+            float overcast = 1.0 - 0.6 * smoothstep(0.6, 0.95, e);                                    // thick overcast: no distinct shadows
+            float sh = smoothstep(cov, cov + 0.10, n) * sunUp * overcast;
+            // cast shadows: trees, houses, poles and lamp posts throw shadows away from the sun, long when it is low
+            if (!isTree && p.y < HZ) {
+                vec2 g = groundW(p.x, tg);
+                float pxm = px1 * WSC / tg;
+                vec2 dir = normalize(vec2(-(sunX * A - VP.x), -1.0));                  // sun ahead of us: shadows come toward us
+                float tanE = tan(radians(max(sunElev, 2.0)));
+                bool inSh = false;
+                for (int i = 0; i < 6 && !inSh; i++) {
+                    float tc = (HZ - LEFT[i].y) / HZ, H = LEFT[i].z * WSC / tc;
+                    inSh = inShadow(g, groundW(LEFT[i].x, tc), dir, min(H / tanE, 140.0), 0.26 * H, 0, pxm);
+                }
+                for (int i = 0; i < 5 && !inSh; i++) {
+                    float tc = (HZ - RIGHT[i].y) / HZ, H = RIGHT[i].z * WSC / tc;
+                    inSh = inShadow(g, groundW(A - RIGHT[i].x, tc), dir, min(H / tanE, 140.0), 0.26 * H, 0, pxm);
+                }
+                for (int side = 0; side < 2 && !inSh; side++) for (int i = 0; i < 12 && !inSh; i++) {
+                    float tT, gyT, cxT, hT;
+                    if (!groveTree(side, i, tT, gyT, cxT, hT)) continue;
+                    float H = hT * WSC / tT;
+                    inSh = inShadow(g, groundW(cxT, tT), dir, min(H / tanE, 140.0), 0.26 * H, 0, pxm);
+                }
+                for (int i = 0; i < 4 && !inSh; i++) {
+                    float tH = HOUSES[i].y, gyH = HZ - tH * HZ, lat = HOUSES[i].z;
+                    int v = int(HOUSES[i].x);
+                    float H = v == 0 ? 8.8 : v == 1 ? 6.4 : v == 2 ? 8.5 : 5.8, r = v == 0 ? 5.0 : v == 1 ? 3.6 : v == 2 ? 5.4 : 4.2;
+                    inSh = inShadow(g, groundW(roadCx(gyH) + roadHw(gyH) * sign(lat) + lat * tH, tH), dir, min(H / tanE, 140.0), r, 1, pxm);
+                }
+                for (int k = 0; k < 7 && !inSh; k++) {
+                    Pole P = pole(k);
+                    float H = (P.top.y - P.base.y) * WSC / P.t;
+                    inSh = inShadow(g, groundW(P.base.x, P.t), dir, min(H / tanE, 140.0), 0.16, 2, pxm);
+                }
+                if (!inSh) inSh = inShadow(g, groundW(post1, lt1), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm)
+                               || inShadow(g, groundW(post2, lt2), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm);
+                if (inSh) {                                                           // snow in sun-shadow is a clear sky-blue
+                    float cs = 0.9 * day * smoothstep(1.0, 6.0, sunElev) * (1.0 - 0.45 * smoothstep(0.6, 0.95, e));
+                    col = mix(col, col * vec3(0.56, 0.65, 0.90), cs);
+                    sh *= 0.4;                                                        // don't stack the cloud shade on top
+                }
+            }
             col = mix(col, col * vec3(0.70, 0.76, 0.92), sh * 0.85);    // shaded snow goes cooler and bluer, not just darker
         }
     }
