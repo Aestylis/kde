@@ -2,7 +2,7 @@
 
 ### Short description
 
-A quiet pixel-art winter road that follows the real time of day, with a tiny snowplough that clears it every morning.
+A quiet pixel-art winter road that follows the real time of day and weather, with a county snowplough that clears it every morning.
 
 ### Description
 
