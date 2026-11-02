@@ -2,7 +2,7 @@
   "KPlugin": {
     "Id": "aestylis.plasma.wallpaper.silentroad",
     "Name": "Silent County Road",
-    "Version": "2.0",
+    "Version": "2.1",
     "Category": "Wallpaper",
     "Description": "A quiet pixel-art winter road that follows the real sun and moon at your location, with optional live weather. Snow gathers overnight, lights come on at dusk and a county snowplow clears the road every morning. Includes a matching Sky scene for a second monitor. Procedural, GPU-rendered, ~1-3% CPU.",
     "Icon": "preferences-desktop-wallpaper",

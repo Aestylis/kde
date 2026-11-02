@@ -25,7 +25,7 @@ Live weather is off by default. It needs no account and shares only your configu
 INSTALL
 
 Desktop and Wallpaper → Get New Plugins… → search for "Silent County Road", then pick it under Wallpaper type.
-Or manually: kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.0.tar.gz
+Or manually: kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.1.tar.gz
 
 Requires Plasma 6. The shaders need desktop OpenGL or Vulkan.
 

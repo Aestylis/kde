@@ -60,13 +60,15 @@ Install from:
 
 Or manually:
 
-`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.0.tar.gz`
+`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.1.tar.gz`
 
 ### Source
 
 https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
+
+**2.1:** Adaptive frame pacing: the scene renders at up to 12 fps when calm and at full rate only while something fast is on screen, roughly halving GPU use (14% to 8-9% on the author's desktop). A few faraway house lights twinkle in the woods in the evening.
 
 **2.0:** A full landscape. Optional live weather from Open-Meteo (wind, gusts, direction, snowfall, cloud cover and cloud type); moonlight and sunlight cast shadows; Earth's shadow and the Belt of Venus at twilight; three mountain ranges with alpenglow; procedurally grown spruces that sway, hold snow overnight and shed it by day; a farmhouse, red barn, cabin and cottage with chimney smoke and windows on their own evening schedules; 1980s traffic and a full-sized county snowplow drawn in 3D through the scene's camera; deer by day, foxes at night, birds on the wire; one gusty wind driving snow, trees, wires, smoke and streetlamps; snow glitter; material-specific shading ramps and dithering.
 
@@ -93,9 +95,9 @@ Anyone who installed through Get New Plugins is then offered the update.
 **Store page:** https://store.kde.org/p/2380896 (also https://www.opendesktop.org/p/2380896/)
 
 **Category:** Plasma 6 Wallpaper Plugins
-**Version:** 2.0
+**Version:** 2.1
 **Licence:** MIT
 **Homepage / source:** https://github.com/Aestylis/kde/tree/main/silent-county-road
-**File:** `dist/silent-county-road-2.0.tar.gz` (run `./build.sh`)
+**File:** `dist/silent-county-road-2.1.tar.gz` (run `./build.sh`)
 
 **Screenshots:** `screenshots/1-night.png` through `screenshots/6-sky-day.png`
