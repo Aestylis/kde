@@ -1098,6 +1098,14 @@ void main() {
     // ---------------- SNOW (in pixel units; 3 layers + rare near flakes)
     vec2 pp = q + 0.5;
     float flake = 0.0;
+    // turbulence: a divergence-free swirl (curl of a slow noise) bends the flakes' paths so they eddy together instead of
+    // sliding in lockstep; stronger in gusts. Streaks: in strong gusts the near flakes smear along their motion.
+    float gS = max(gustAt(time - p.x * 2.0), 0.0);
+    float vNow = (windX(time + 0.25) - windX(time - 0.25)) * 2.0;                  // wind speed now, px/s
+    vec2 ep = pp / 90.0 + vec2(time * 0.04, -time * 0.02);
+    float e0 = vnoise(ep), ex = vnoise(ep + vec2(0.05, 0.0)), ey = vnoise(ep + vec2(0.0, 0.05));
+    vec2 curl = vec2(ey - e0, -(ex - e0)) / 0.05;
+    float turb = min(windAmt, 2.0) * (0.4 + 1.6 * gS) * 3.0;
     for (int l = 0; l < 4; l++) {
         float cs    = l == 0 ? 7.0  : l == 1 ? 11.0 : l == 2 ? 19.0 : 70.0;
         float speed = l == 0 ? 2.6  : l == 1 ? 4.2  : l == 2 ? 6.5  : 5.0;
@@ -1106,9 +1114,9 @@ void main() {
         float size  = l == 0 ? 0.55 : l == 1 ? 0.65 : l == 2 ? 0.9  : 2.2;
         float bright= l == 0 ? 0.35 : l == 1 ? 0.55 : l == 2 ? 0.8  : 0.9;
         // varied fall speed: every column of cells has its own pace, so flakes slide past each other
-        float sx = pp.x - wind * wm;
+        float sx = pp.x - wind * wm + curl.x * turb * wm;
         float colH = uh(vec2(floor(sx / cs), 0.0), float(l) * 17.0 + 0.0);
-        vec2 sp = vec2(sx, pp.y + time * speed * (0.6 + 0.8 * colH) + colH * 997.0);
+        vec2 sp = vec2(sx, pp.y + time * speed * (0.6 + 0.8 * colH) + colH * 997.0 + curl.y * turb * wm);
         vec2 cell = floor(sp / cs);
         vec2 h = vec2(uh(cell, float(l) * 31.0 + 1.0), uh(cell, float(l) * 31.0 + 2.0));
         // patchy, breathing snowfall: slow drifting bands of heavier/lighter snow + intensity that swells over minutes
@@ -1118,6 +1126,12 @@ void main() {
         vec2 c = (cell + 0.15 + 0.7 * vec2(uh(cell, float(l) * 31.0 + 3.0), uh(cell, float(l) * 31.0 + 4.0))) * cs;
         c.x += sin(time * (0.3 + 0.9 * h.y) + h.y * 40.0) * (0.3 + 1.7 * hash11(h.y * 71.0)) * (1.0 + float(l));   // each flake its own sway       // gentle sway
         float d = length(sp - c);
+        if (l >= 2) {                                                                 // near flakes streak along their motion
+            float vx = vNow * wm, vy = speed * (0.6 + 0.8 * colH);
+            float st = clamp(length(vec2(vx, vy)) * 0.12 - 0.6, 0.0, 2.5) * smoothstep(0.25, 0.7, gS);
+            vec2 m = normalize(vec2(vx, -vy)), e2 = sp - c;
+            d = length(vec2(dot(e2, m) / (1.0 + st), dot(e2, vec2(-m.y, m.x))));
+        }
         if (d < size) flake = max(flake, bright * (l == 3 ? smoothstep(size, size * 0.3, d) : 1.0));
     }
     // blowing snow: in strong gusts, low wisps of loose snow stream across the field (sheared, fast, near the ground)
