@@ -485,7 +485,7 @@ void main() {
     vec3 snowTip = DN(vec3(0.20, 0.23, 0.29), vec3(0.90, 0.92, 0.95));
     float tip = 0.0, tier = 0.0;
     //                     variant, depth t, lateral offset (world), wall colour
-    const vec4 HOUSES[4] = vec4[4](vec4(0.0, 0.150, 2.6, 0.0), vec4(2.0, 0.165, 5.2, 2.0),
+    const vec4 HOUSES[4] = vec4[4](vec4(0.0, 0.150, 2.6, 0.0), vec4(2.0, 0.132, 4.6, 2.0),
                                    vec4(1.0, 0.120, -2.4, 1.0), vec4(3.0, 0.080, -4.6, 3.0));
     // shade one tree pixel at depth t
     #define SHADE_TREE(cxT, tT, detail) { \
@@ -545,7 +545,7 @@ void main() {
             vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(1.0, 0.98, 0.95)) * (DN(vec3(0.45), vec3(0.68)) + 0.62 * dif) * mix(0.70, 1.0, hao);   // snow bounce fills the shade by day
             light = mix(light, light * glow * 1.4, twi * 0.5);
             int wc = int(HOUSES[i].w);
-            vec3 wall = wc == 0 ? vec3(0.80, 0.78, 0.72) : wc == 1 ? vec3(0.40, 0.27, 0.17) : wc == 2 ? vec3(0.62, 0.12, 0.08) : vec3(0.78, 0.70, 0.47);
+            vec3 wall = wc == 0 ? vec3(0.80, 0.78, 0.72) : wc == 1 ? vec3(0.40, 0.27, 0.17) : wc == 2 ? vec3(0.48, 0.11, 0.07) : vec3(0.78, 0.70, 0.47);
             vec3 c;
             float hz = haze;
             if (mat == 2) c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.8, 1.0, hao);
@@ -559,6 +559,7 @@ void main() {
                 vec3 alb = mat == 0 ? wall : mat == 1 ? vec3(0.22, 0.20, 0.21) : mat == 4 ? vec3(0.86, 0.86, 0.82)
                          : mat == 5 ? vec3(0.30, 0.15, 0.10) : mat == 6 ? vec3(0.46, 0.40, 0.37) : vec3(0.10, 0.10, 0.11);
                 c = alb * light;
+                if (mat == 0 && wc == 2) hz *= 0.35;   // red barn: haze would push it to orange in the palette
             }
             col = mix(c, hazeCol, hz); zTree = tH; houseFog = hz < haze ? 0.15 : 0.45;
         }
@@ -594,7 +595,7 @@ void main() {
             float gy = HZ - tT * HZ;
             float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
             bool yard = false;                                                      // keep the house yards clear of trees
-            for (int hI = 0; hI < 4; hI++) if (abs(tT - HOUSES[hI].y) < 0.035 && abs(lat - HOUSES[hI].z) < 1.9) yard = true;
+            for (int hI = 0; hI < 4; hI++) { float dT = tT - HOUSES[hI].y, dL = abs(lat - HOUSES[hI].z); if ((abs(dT) < 0.035 && dL < 1.9) || (dT > 0.0 && dT < 0.09 && dL < 0.9)) yard = true; }   // the yard, and a sight line to it
             if (yard) continue;
             float cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
             float h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
