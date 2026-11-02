@@ -291,7 +291,7 @@ float lampLight(vec2 p, vec2 head, float g, float k, float strength, out float h
 }
 // snap a light level to n bands, with a 4x4-dithered seam between neighbouring bands
 float lightSteps(float x, float n, vec2 q) {
-    return clamp(floor(x * n + bayer4(q) * 0.9 + 0.05) / n, 0.0, 1.0);
+    return clamp(floor(x * n + 0.5 + (bayer4(q) - 0.5) * 0.4) / n, 0.0, 1.0);    // narrow dithered seam, flat bands
 }
 
 // Lamp flicker: time is split into windows; a window hosts a stutter episode with probability `chance`.
@@ -335,9 +335,12 @@ void main() {
     f1 *= lamps * boot1;
     f2 *= lamps * boot2;
     float h1, h2, c1, c2;
-    float pool = lampLight(p, lamp1, g1, 1.0, 1.0, h1, c1) * f1 + lampLight(p, lamp2, g2, lt2 / lt1, 0.8, h2, c2) * f2;
-    float halo = lightSteps(h1 * f1 + h2 * f2, 3.0, q);
-    float beam = lightSteps(c1 * f1 + c2 * f2, 3.0, q);
+    f1 = f1 > 0.6 ? 1.0 : f1 > 0.2 ? 0.5 : 0.0;     // flicker in clean steps: a stutter blinks, it doesn't crawl through the bands
+    f2 = f2 > 0.6 ? 1.0 : f2 > 0.2 ? 0.5 : 0.0;
+    // overlapping lamps take the brighter one (never the sum), and the far lamp is too far off to show a beam
+    float pool = max(lampLight(p, lamp1, g1, 1.0, 1.0, h1, c1) * f1, lampLight(p, lamp2, g2, lt2 / lt1, 0.8, h2, c2) * f2);
+    float halo = lightSteps(max(h1 * f1, h2 * f2), 3.0, q);
+    float beam = lightSteps(c1 * f1, 2.0, q);
     pool = lightSteps(pool, 4.0, q);
     float L = max(pool, beam * 0.8);           // what lit surfaces / flakes / animals see
     vec3 warm = vec3(0.86, 0.66, 0.40);
@@ -613,7 +616,8 @@ void main() {
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
     col = mix(col, fogCol, clamp(fog, 0.0, 0.75));
-    col = mix(col, col * vec3(1.15, 0.95, 0.70) + vec3(0.95, 0.60, 0.26) * (0.08 + 0.06 * snowAmt + 0.06 * fogAmt), beam * 0.7);   // the beam: lit snow-haze, pushed warm so even its faint band reads amber         // the beam itself, lit snow-haze in the air
+    col = mix(col, col * vec3(1.06, 0.93, 0.74), beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
+    col += vec3(0.95, 0.60, 0.26) * beam * (0.13 + 0.06 * snowAmt + 0.06 * fogAmt);   // the beam: lit snow-haze in the air, only ever brightens
 
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
@@ -630,7 +634,7 @@ void main() {
         if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = dmetal;
         if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) col = dmetal;
         float dh = length((p - head) / px1);
-        col += lc * on * (1.0 - 0.45 * dfade) * (exp(-dh * (0.55 + 0.5 * dfade)) * 0.55 + exp(-length(vec2((p.x - head.x) / (0.03 * tl / 0.055), (p.y - gy) / (0.008 * tl / 0.055)))) * 0.25);
+        if (dh < 1.6 && on > 0.5) col = mix(col, lc, 0.45 * (1.0 - 0.45 * dfade) * step(bayer4(q), 0.6));    // one crisp dithered ring, no soft glow
         if (dh < 0.75) col = mix(mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), hazeCol, dfade), lc, on);
     }
 
