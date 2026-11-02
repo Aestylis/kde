@@ -287,6 +287,11 @@ WallpaperItem {
         fx.rising = m < 12 * 60 ? 1 : 0
         fx.localHour = m / 60
         fx.sunX = Math.max(-0.2, Math.min(1.2, 0.08 + 0.84 * (sp.az - times.azRise) / Math.max(1, times.azSet - times.azRise)))
+        // the anti-sun point (where Earth's shadow and the Belt of Venus sit at twilight) on the same screen mapping;
+        // the sky spans the sun's day arc across the screen, so at dusk it lies just off the left edge, at dawn the right
+        var span = Math.max(1, times.azSet - times.azRise), anti = (sp.az + 180) % 360
+        if (anti - times.azRise > 180) anti -= 360
+        fx.belt = Qt.vector4d(0.08 + 0.84 * (anti - times.azRise) / span, span / 0.84, 0, 0)
 
         // lamps: on below ~3 deg of sun elevation, with a startup stutter on switch-on
         var on = sp.elev < 3
@@ -395,6 +400,7 @@ WallpaperItem {
         property vector4d animal: Qt.vector4d(-99, 0, 0, 0)
         property vector4d animal2: Qt.vector4d(0, 0, 0, 0)
         property real localHour: 12
+        property vector4d belt: Qt.vector4d(-9, 160, 0, 0)
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
         // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:

@@ -52,6 +52,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 fox)
     vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
     float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
+    vec4 belt;       // x = anti-sun point across the screen (0..1 of width, may lie off-screen), y = degrees per screen width
     vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
     float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
     vec2 res;        // item size
@@ -495,6 +496,19 @@ void main() {
             cc += lightCol * (1.0 - cl) * exp(-length(p - lightPos) * 3.0) * 0.55;
             col = mix(col, cc, cl * 0.9);
         }
+    }
+    // Earth's shadow and the Belt of Venus: at twilight, opposite the sun, a dark blue band rises from the horizon as the sun
+    // sinks, with a pink band above it; both fade with angular distance from the anti-sun point.
+    // Applied after the clouds: low clouds over there take the same pink light and the same shadow
+    if (sunElev < 3.0 && sunElev > -9.0 && p.y > HZ) {
+        float dAz = (p.x / A - belt.x) * belt.y;                                     // degrees from the anti-sun azimuth
+        float reach = exp(-pow(dAz / 75.0, 2.0)) * smoothstep(-9.0, -3.0, sunElev) * smoothstep(3.0, 0.5, sunElev);
+        float ang = degrees(atan(p.y - HZ));                                          // degrees above the horizon (focal length 1)
+        float shadowTop = 1.0 + 1.1 * clamp(-sunElev, 0.0, 8.0);                     // Earth's shadow climbs as the sun sinks
+        float band = smoothstep(shadowTop, shadowTop - 1.5, ang);
+        float pink = smoothstep(shadowTop - 1.0, shadowTop + 1.5, ang) * smoothstep(shadowTop + 14.0, shadowTop + 5.0, ang);
+        col = mix(col, vec3(0.30, 0.34, 0.52), band * reach * 0.62);
+        col = mix(col, vec3(0.88, 0.60, 0.68), pink * reach * 0.58);
     }
     col += warm * halo * 0.5;
     // low sun: a pale disc just above the tree line around sunrise / sunset (higher sun lives on the sky screen)
