@@ -978,7 +978,7 @@ void main() {
         vec3 c = mix(darkCol, litCol * 1.15, dif) * mix(0.50, 1.08, sao); \
         float rank = clamp((sao - 0.6) / 0.4, 0.0, 1.0) * 0.35 + 0.25 * dif + 0.40 * tx.a; /* sunny, outer clumps melt first */ \
         vec3 ra = ALB_SPRUCE; \
-        if (smat == 1 && rank < treeSnow * 1.08) { \
+        if (smat == 1 && rank < (treeSnow - 0.75 * windKnock.x) * 1.08) { /* gusts shake the most exposed clumps off too */ \
             c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.78, 1.0, sao); ra = ALB_SNOW; } \
         else if (smat >= 2) { c = mix(darkCol, litCol, dif * 0.6) * vec3(1.30, 1.0, 0.75) * 0.9; ra = ALB_BARK; } \
         col = mix(c, hazeCol, haze); zTree = (tT); useRamp = true; rampAlb = ra; }
