@@ -556,7 +556,7 @@ bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
         else if (k <= 12) { float sx = (k == 9 || k == 10) ? -1.0 : 1.0, z0 = (k == 9 || k == 11) ? 0.65 : 4.05;
             boxPl(vec3(min(sx * 0.58, sx * 0.90), 0.0, z0), vec3(max(sx * 0.58, sx * 0.90), 0.74, z0 + 0.72), pl, cnt); }
         else return false;
-    } else {                                              // van: W 0.92, L 4.9
+    } else if (ty == 2) {                                 // van: W 0.92, L 4.9
         if (k == 0) boxPl(vec3(-0.92, 0.32, 0.05), vec3(0.92, 1.95, 4.10), pl, cnt);
         else if (k == 1) {                                // short sloped nose with the windshield
             pl[0] = vec4(0, -1, 0, -0.32); pl[1] = vec4(-1, 0, 0, 0.92); pl[2] = vec4(1, 0, 0, 0.92);
@@ -569,10 +569,31 @@ bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
         else if (k <= 8) { float sx = (k == 5 || k == 6) ? -1.0 : 1.0, z0 = (k == 5 || k == 7) ? 0.55 : 3.55;
             boxPl(vec3(min(sx * 0.62, sx * 0.90), 0.0, z0), vec3(max(sx * 0.62, sx * 0.90), 0.64, z0 + 0.62), pl, cnt); }
         else return false;
+    } else if (ty == 3) {                                 // county plough truck: W 1.25, ~9 m with the blade
+        if (k == 0) boxPl(vec3(-1.10, 0.55, 0.00), vec3(1.10, 0.95, 7.30), pl, cnt);       // frame
+        else if (k == 1) boxPl(vec3(-1.25, 0.95, 0.10), vec3(1.25, 2.35, 4.40), pl, cnt);  // dump body
+        else if (k == 2) boxPl(vec3(-1.20, 0.95, 4.60), vec3(1.20, 2.85, 6.60), pl, cnt);  // cab
+        else if (k == 3) boxPl(vec3(-1.05, 0.95, 6.60), vec3(1.05, 2.00, 7.90), pl, cnt);  // hood
+        else if (k == 4) boxPl(vec3(-0.16, 2.85, 5.40), vec3(0.16, 3.07, 5.72), pl, cnt);  // beacon
+        else if (k == 5) {                                // the blade: 6.4 m wide (the road is 6.8), angled 15 deg (left end forward), 1.45 m tall
+            vec3 nb = normalize(vec3(tan(radians(15.0)), 0.0, 1.0));
+            pl[0] = vec4(nb, dot(nb, vec3(0.0, 0.0, 8.90))); pl[1] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 8.70)));
+            pl[2] = vec4(0, -1, 0, -0.06); pl[3] = vec4(0, 1, 0, 1.45); pl[4] = vec4(-1, 0, 0, 3.20); pl[5] = vec4(1, 0, 0, 3.20); cnt = 6;
+        }
+        else if (k == 6) boxPl(vec3(-0.55, 0.40, 7.90), vec3(0.55, 0.75, 8.75), pl, cnt);   // push frame
+        else if (k == 7) {                                // snow rolling off the trailing (right) end of the blade
+            vec3 nb = normalize(vec3(tan(radians(15.0)), 0.0, 1.0));
+            pl[0] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 8.90))); pl[1] = vec4(nb, dot(nb, vec3(0.0, 0.0, 9.80)));
+            pl[2] = vec4(0, -1, 0, 0.0); pl[3] = plT(vec3(-0.45, 1.0, 0.0), vec3(1.6, 1.25, 0.0)); pl[4] = vec4(-1, 0, 0, -0.4); pl[5] = vec4(1, 0, 0, 3.75); cnt = 6;
+        }
+        else if (k <= 11) { float sx = (k == 8 || k == 9) ? -1.0 : 1.0; bool fr = (k == 8 || k == 10);
+            float z0 = fr ? 6.45 : 0.95, z1 = fr ? 7.45 : 2.35;                            // front axle / dual rear axle
+            boxPl(vec3(min(sx * 0.80, sx * 1.27), 0.0, z0), vec3(max(sx * 0.80, sx * 1.27), 1.02, z1), pl, cnt); }
+        else return false;
     }
     return true;
 }
-float carLen(int ty) { return ty == 0 ? 4.6 : ty == 1 ? 5.3 : 4.9; }
+float carLen(int ty) { return ty == 0 ? 4.6 : ty == 1 ? 5.3 : ty == 2 ? 4.9 : 9.0; }
 // nearest hit along the ray (local frame); returns the part id or -1
 int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
     bt = 1e9; bn = vec3(0.0); bp = vec3(0.0); int best = -1;
@@ -588,6 +609,31 @@ int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
 int carMaterial(int ty, int pid, vec3 P, vec3 n) {
     float ax = abs(P.x), y = P.y;
     bool rear = n.z < -0.5, front = n.z > 0.5, side = abs(n.x) > 0.5;
+    if (ty == 3) {
+        if (pid == 0 || pid == 6) return C_GRILLE;                                        // frame, push frame
+        if (pid == 1) {
+            if (rear && ax > 0.90 && y > 1.00 && y < 1.30) return C_LAMP;                 // tail lights
+            if (rear && ax < 0.35 && y > 1.02 && y < 1.20) return C_PLATE;
+            if (rear && abs(y - 1.75) < 0.05) return C_GRILLE;                            // tailgate hinge line
+            if (n.y > 0.9) return C_SNOW;                                                 // snow in the dump body
+            return C_PAINT;
+        }
+        if (pid == 2) {
+            if (rear && ax < 0.85 && y > 1.85 && y < 2.55) return C_GLASS;
+            if (side && y > 1.85 && y < 2.55 && P.z > 5.0) return C_GLASS;
+            if (n.y > 0.9) return C_PAINT;
+            return C_PAINT;
+        }
+        if (pid == 3) return front && ax < 0.70 && y > 1.10 && y < 1.75 ? C_GRILLE : C_PAINT;
+        if (pid == 4) return 8;                                                           // amber beacon
+        if (pid == 5) {                                                                   // blade: orange moldboard, dark ribbed back
+            if (y < 0.16) return C_RUBBER;                                                // cutting edge
+            if (dot(n, vec3(0.0, 0.0, 1.0)) < 0.0) return fract(P.x * 1.1) < 0.10 ? 9 : C_PAINT;   // painted back, dark vertical bracing ribs
+            return C_PAINT;
+        }
+        if (pid == 7) return C_SNOW;
+        return C_RUBBER;
+    }
     if (ty == 0) {
         if (pid == 0) {
             if (rear && y > 0.60 && y < 0.80 && ax > 0.30) return C_LAMP;
@@ -1231,37 +1277,62 @@ void main() {
         if (dh < 0.75) useRamp = false, col = mix(mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), hazeCol, dfade), lc, on);
     }
 
-    // ---------------- PLOUGH (drawn after the fog: it is close to the camera; seen from behind, driving away up the road; amber beacon on the cab)
+    // ---------------- PLOUGH (drawn after the fog, faded by it with distance): a county plough truck ray-traced through the
+    //                  scene's camera, driving away up the middle of the road; its 5.8 m blade fills most of the 6.8 m road
     float beaconGlow = 0.0;
     bool tail = false;
+    bool exact = false;
+    vec3 exactCol = vec3(0.0);
     vec2 beaconP = vec2(-9.0);
     if (plough >= 0.0 && plough <= 1.0) {
-        float tp = 1.0 - plough;                                   // 1 at the bottom of the screen, 0 at the horizon
+        float tp = max(1.0 - plough, 0.004);                       // depth: 1 at the bottom of the screen, 0 at the horizon
         float yb = HZ - tp * HZ;
-        float hwp = roadHw(yb);
-        float xc = roadCx(yb) + hwp * 0.22;                        // keeps to the right lane
-        float wv = max(hwp * 0.72, px1 * 4.0), hv = wv * 0.78;
-        float dxp = abs(p.x - xc), dyp = p.y - yb;
-        if (dyp > 0.0 && dyp < hv * 0.58 && dxp < wv * 0.5) {
-            col = vec3(0.80, 0.52, 0.20);                                          // body
-            if (dyp < max(px1, hv * 0.12)) col = vec3(0.16, 0.13, 0.11);           // bumper
-            if (dyp < hv * 0.25 && dyp > hv * 0.08 && dxp > wv * 0.5 - max(px1, wv * 0.1)) tail = true;   // tail lights
-        }
-        if (dyp >= hv * 0.58 && dyp < hv && dxp < wv * 0.30) {
-            col = vec3(0.74, 0.48, 0.19);                                          // cab
-            if (dyp > hv * 0.68 && dyp < hv * 0.92 && dxp < wv * 0.20) col = vec3(0.07, 0.08, 0.10);   // rear window
-        }
-        beaconP = vec2(xc, yb + hv + max(px1, hv * 0.08));
+        float xc = roadCx(yb) + roadHw(yb) * 0.06;
+        float Zc = WSC / tp, Xc = (xc - VP.x) * WSC / tp;
+        vec3 org = vec3(Xc, 0.0, Zc - 4.5);
+        float span = 3.6 * tp;                                     // generous: blade half-width (3.2 m) is 0.25 t on screen
         bool on = fract(time * 1.6) < 0.5;
-        if (abs(p.x - beaconP.x) < max(px1 * 0.6, wv * 0.06) && abs(p.y - beaconP.y) < max(px1 * 0.6, hv * 0.07))
-            col = on ? vec3(1.0, 0.80, 0.45) : vec3(0.43, 0.33, 0.21);
+        if (abs(p.x - xc) < span * 0.30 + 4.0 * px1 && p.y > yb - 0.2 * tp && p.y < yb + 0.36 * tp + 3.0 * px1) {
+            vec3 ro, rd; carRay(p, org, true, ro, rd);
+            float ct; vec3 cn, cP;
+            int pid = carTrace(3, ro, rd, ct, cn, cP);
+            if (pid >= 0) {
+                int cm = carMaterial(3, pid, cP, cn);
+                if (tp > 0.10 && (!carHitAt(3, p + vec2(px1, 0.0), org, true) || !carHitAt(3, p - vec2(px1, 0.0), org, true)
+                               || !carHitAt(3, p + vec2(0.0, px1), org, true))) cm = C_RUBBER;
+                vec3 nw = cn, rdw = rd;
+                bool bySunC = day > 0.25 || twi > 0.3;
+                vec2 sh2 = normalize(vec2(sunX * A - VP.x, 1.0));
+                float se = radians(max(sunElev, 2.0));
+                vec3 Lk = bySunC ? normalize(vec3(sh2.x * cos(se), sin(se), sh2.y * cos(se)))
+                                 : normalize(vec3(sin(radians(moon.x)) * cos(radians(max(moon.y, 2.0))), sin(radians(max(moon.y, 2.0))), cos(radians(moon.x)) * cos(radians(max(moon.y, 2.0)))));
+                float kd = max(dot(nw, Lk), 0.0) * (bySunC ? 1.0 : 0.5 * moon.z * smoothstep(2.0, 10.0, moon.y));
+                vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(0.98, 0.97, 0.95)) * (DN(vec3(0.42), vec3(0.50)) + 0.22 * nw.y + 0.70 * kd)
+                           + vec3(1.0, 0.80, 0.55) * 0.5 * clamp(L, 0.0, 1.0) + vec3(1.0, 0.70, 0.30) * (on ? 0.25 : 0.0) * smoothstep(1.0, 0.0, length(cP - vec3(0.0, 3.0, 5.55)) / 4.0);
+                light = mix(light, light * glow * 1.4, twi * 0.5);
+                vec3 rf = reflect(rdw, nw);
+                vec3 skyR = mix(DN(vec3(0.05, 0.06, 0.09), vec3(0.42, 0.48, 0.56)), DN(vec3(0.12, 0.15, 0.24), vec3(0.62, 0.74, 0.90)), clamp(rf.y * 2.0, 0.0, 1.0));
+                vec3 orange = vec3(0.86, 0.46, 0.10);
+                vec3 c;
+                if (cm == C_PAINT) c = quantizeRamp(orange * light, orange, q, false, L, hazeCol, fogCol);
+                else if (cm == C_GLASS) c = skyR * 0.8;
+                else if (cm == C_GRILLE) c = vec3(0.10, 0.10, 0.11) * (0.7 + 0.5 * kd) + light * 0.03;
+                else if (cm == 9) c = vec3(0.20, 0.20, 0.22) * light;                       // blade back: dark steel
+                else if (cm == C_RUBBER) c = vec3(0.05, 0.05, 0.06);
+                else if (cm == C_LAMP) { tail = lamps > 0.5 || day < 0.6; c = vec3(0.36, 0.08, 0.07) * light; }   // ploughs run with their lights on
+                else if (cm == C_PLATE) c = vec3(0.86, 0.86, 0.78) * light;
+                else if (cm == 8) c = on ? vec3(1.0, 0.80, 0.45) : vec3(0.43, 0.33, 0.21);
+                else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * (0.80 + 0.20 * nw.y);   // snow on the blade / in the body
+                exact = true; exactCol = mix(clamp(c, 0.0, 1.0), fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tp) * 0.8);
+            }
+        }
+        float Eh = HZ * WSC, Zb = Zc + 1.05;                       // beacon: project (X, 3.0 m, cab) onto the screen
+        beaconP = vec2(VP.x + Xc / Zb, HZ + (3.0 - Eh) / Zb);
         if (on) beaconGlow = exp(-length((p - beaconP) / vec2(0.09, 0.05)) * 2.2) * (1.0 - 0.7 * day);
     }
     col += vec3(0.95, 0.62, 0.25) * beaconGlow * 0.55;
 
     // ---------------- TRAFFIC (one vehicle at a time; drawn over the fog but faded by it with distance)
-    bool exact = false;
-    vec3 exactCol = vec3(0.0);
     if (veh.x >= 0.0 && veh.x <= 1.0) {
         bool away = veh.y > 0.0;
         // perspective: constant speed in distance, so fast up close and slow near the horizon
