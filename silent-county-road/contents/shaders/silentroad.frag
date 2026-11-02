@@ -61,6 +61,7 @@ layout(std140, binding = 0) uniform buf {
 };
 layout(binding = 1) uniform sampler2D atlas;     // wildlife sprite atlas (see contents/images/CREDITS.md)
 layout(binding = 3) uniform sampler2D houseAtlas; // farmhouse, cabin, barn, cottage: normal, material*32+ao / window id (tools/gen_houses.py)
+layout(binding = 4) uniform sampler2D carAtlas;   // sedan / pickup / van, rear + front, 3/4 view (tools/gen_cars.py)
 layout(binding = 2) uniform sampler2D treeAtlas; // grown spruces: normal.xy, material*64+ao, coverage (tools/gen_trees.py)
 
 // ------------------------------------------------------------------ utilities
@@ -326,6 +327,23 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
     if (flip) tx.r = 1.0 - tx.r;
     tx.a = uh(vec2(float(ix / 3), float(iy / 2)), seed * 3.0 + float(b));   // clump hash: snow melts in patches, not specks
     return true;
+}
+
+// one vehicle from the car atlas: square box bw across (uv), wheels on the bottom row at yb, centred on xc.
+// idx = type * 2 + (oncoming ? 1 : 0). tx = the texel (normal, material, ao); ip = its pixel in the 88-px frame.
+bool carSprite(vec2 p, float yb, float xc, float bw, int idx, out vec4 tx, out vec2 ip) {
+    tx = vec4(0.0); ip = vec2(0.0);
+    if (p.y < yb || p.y > yb + bw || abs(p.x - xc) > 0.5 * bw) return false;
+    float bpx = bw / px1;
+    int b = bpx <= 11.0 ? 3 : bpx <= 22.0 ? 2 : bpx <= 44.0 ? 1 : 0;
+    int bh = b == 0 ? 88 : b == 1 ? 44 : b == 2 ? 22 : 11;
+    int y0 = b == 0 ? 0 : b == 1 ? 88 : b == 2 ? 132 : 154;
+    float sc = float(bh) / bpx;
+    int ix = int(floor((p.x - xc) / px1 * sc + float(bh) * 0.5)), iy = int(floor((p.y - yb) / px1 * sc));
+    if (ix < 0 || iy < 0 || ix >= bh || iy >= bh) return false;
+    tx = texelFetch(carAtlas, ivec2(idx * bh + ix, y0 + bh - 1 - iy), 0);
+    ip = vec2(ix, iy) * (88.0 / float(bh));
+    return tx.a > 0.5;
 }
 
 // one building from the house atlas (box 1.6 x hb wide, ground origin 0.10 hb above the box bottom, at its centre)
@@ -1092,26 +1110,37 @@ void main() {
                   : vcol == 3 ? vec3(0.90, 0.91, 0.92) : vec3(0.20, 0.32, 0.24);
         float shade = mix(0.30, 1.0, day) + 0.5 * clamp(L, 0.0, 1.0);
         float wv = max(hwv * 0.72, px1 * 2.0);                               // a car fills ~70% of its lane (lane = half the road)
-        float hv = wv * (vtype == 2 ? 0.95 : vtype == 1 ? 0.72 : 0.62);
-        float dxv = abs(p.x - xc), dyv = p.y - yb;
-        float lowerH = vtype == 2 ? hv : hv * 0.5;
-        vec3 glass = mix(vec3(0.05, 0.06, 0.08), vec3(0.55, 0.62, 0.70), day);
-        if (dyv > 0.0 && dyv < lowerH && dxv < wv * 0.5) {
-            exact = true; exactCol = body * shade;
-            if (dyv < max(px1, hv * 0.10)) exactCol = vec3(0.08, 0.08, 0.09);                     // bumper
-            if (vtype == 2 && dyv > hv * 0.55 && dyv < hv * 0.82 && dxv < wv * 0.38) exactCol = glass;   // van windows
-        }
-        if (vtype != 2 && dyv >= lowerH && dyv < hv && dxv < wv * (vtype == 1 ? 0.34 : 0.40)) {
-            exact = true; exactCol = body * shade * 0.9;                                           // cabin
-            if (dyv > lowerH + (hv - lowerH) * 0.2 && dyv < hv - (hv - lowerH) * 0.15 && dxv < wv * (vtype == 1 ? 0.27 : 0.33)) exactCol = glass;
-        }
-        bool lightRow = dyv > hv * 0.12 && dyv < hv * 0.30;
-        bool corner = dxv > wv * 0.5 - max(px1, wv * 0.15) && dxv < wv * 0.5;
+        float hv = wv * (vtype == 2 ? 1.05 : vtype == 1 ? 0.95 : 0.80);
         bool lit = lamps > 0.5;
-        if (lightRow && corner) {
+        vec4 ctx; vec2 cip;
+        if (carSprite(p, yb, xc, wv * 4.3 / 1.75, vtype * 2 + (away ? 0 : 1), ctx, cip)) {
+            float cb = floor(ctx.b * 255.0 + 0.5);
+            int cm = int(cb / 32.0); float cao = mod(cb, 32.0) / 31.0;
+            float cnx = ctx.r * 2.0 - 1.0, cny = ctx.g * 2.0 - 1.0, cnz = sqrt(max(0.0, 1.0 - cnx * cnx - cny * cny));
+            float latC = clamp((lightX - xc) * 2.0, -1.0, 1.0);
+            float dif = clamp(dot(vec2(cnx, cny), normalize(vec2(latC * (0.35 + 0.85 * lightLow), 1.0 - 0.45 * lightLow))) * 0.85 + cnz * 0.35, 0.0, 1.0);
+            vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(1.0, 0.98, 0.95)) * (DN(vec3(0.45), vec3(0.62)) + 0.62 * dif) * mix(0.70, 1.0, cao)
+                       + vec3(1.0, 0.80, 0.55) * 0.5 * clamp(L, 0.0, 1.0);                     // street lamps light it too
+            light = mix(light, light * glow * 1.4, twi * 0.5);
+            vec3 c;
             exact = true;
-            if (away) { if (lit) tail = true; else exactCol = vec3(0.32, 0.09, 0.08) * shade; }
-            else exactCol = lit ? vec3(1.0, 0.97, 0.86) : vec3(0.70, 0.72, 0.74) * shade;
+            if (cm == 0 || (cm == 7 && e < 0.3)) {                                          // paint (roof snow only after a snowy night)
+                c = body * light;
+                if (dif > 0.86 && day > 0.25) c = mix(c, vec3(1.0, 0.99, 0.96), 0.55 * day);  // specular glint on the curves
+                c = quantizeRamp(c, body, q, false, L, hazeCol, fogCol);
+            } else if (cm == 1) {                                                           // glass: the sky, a diagonal reflection streak
+                c = DN(vec3(0.06, 0.07, 0.10), vec3(0.50, 0.58, 0.70)) * (0.70 + 0.45 * cny);
+                if (fract((cip.x + cip.y) * 0.075) < 0.16) c = mix(c, DN(vec3(0.25, 0.28, 0.36), vec3(0.88, 0.92, 0.96)), 0.7);
+            } else if (cm == 2) c = DN(vec3(0.22, 0.24, 0.30), vec3(0.80, 0.82, 0.86)) * (0.70 + 0.45 * cny + 0.2 * dif);   // chrome
+            else if (cm == 3) c = vec3(0.05, 0.05, 0.06) + light * 0.02;                   // rubber, trim, outline
+            else if (cm == 4) {                                                             // lamps: tail (going away) or head (oncoming)
+                if (away) { if (lit) tail = true; c = vec3(0.36, 0.08, 0.07) * light; }
+                else c = lit ? vec3(1.0, 0.97, 0.86) : vec3(0.72, 0.74, 0.76) * light;
+            }
+            else if (cm == 5) c = vec3(0.86, 0.86, 0.78) * light;                           // plate
+            else if (cm == 6) c = vec3(0.09, 0.09, 0.10) * (0.8 + 0.4 * dif);              // grille
+            else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * mix(0.82, 1.0, dif);   // roof snow
+            exactCol = c;
         }
         if (exact && !tail) exactCol = mix(exactCol, fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tv) * 0.9);
         if (lit && p.y < HZ) {
