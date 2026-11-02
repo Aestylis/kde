@@ -98,6 +98,20 @@ WallpaperItem {
         var az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat) - Math.tan(dec) * Math.cos(lat)) + Math.PI
         return { elev: elev / rad, az: (az / rad + 360) % 360 }
     }
+    // the moon (low-precision Meeus terms, good to ~1 deg): elevation and azimuth, same conventions as the sun
+    function moonPosition(date) {
+        var rad = Math.PI / 180
+        var n = date.getTime() / 86400000 + 2440587.5 - 2451545.0
+        var L = 218.316 + 13.176396 * n, M = (134.963 + 13.064993 * n) * rad, F = (93.272 + 13.229350 * n) * rad
+        var lam = (L + 6.289 * Math.sin(M)) * rad, beta = 5.128 * Math.sin(F) * rad, eps = 23.439 * rad
+        var ra = Math.atan2(Math.sin(lam) * Math.cos(eps) - Math.tan(beta) * Math.sin(eps), Math.cos(lam))
+        var dec = Math.asin(Math.sin(beta) * Math.cos(eps) + Math.cos(beta) * Math.sin(eps) * Math.sin(lam))
+        var gmst = (18.697374558 + 24.06570982441908 * n) % 24
+        var H = (gmst * 15 + longitude) * rad - ra, lat = latitude * rad
+        var elev = Math.asin(Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(H))
+        var az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat) - Math.tan(dec) * Math.cos(lat)) + Math.PI
+        return { elev: elev / rad, az: (az / rad + 360) % 360 }
+    }
     // today's sunrise / sunset as minutes after local midnight (scan in 2-minute steps; -0.833 deg = standard horizon)
     function sunTimes(date) {
         var d0 = new Date(date); d0.setHours(0, 0, 0, 0)
@@ -341,6 +355,9 @@ WallpaperItem {
         var span = Math.max(1, times.azSet - times.azRise), anti = (sp.az + 180) % 360
         if (anti - times.azRise > 180) anti -= 360
         fx.belt = Qt.vector4d(0.08 + 0.84 * (anti - times.azRise) / span, span / 0.84, 0, 0)
+        // moonlight: azimuth relative to the view (which faces about south; + = west, screen-right), elevation, how lit
+        var mp = moonPosition(d), ph = moonPhaseNow()
+        fx.moon = Qt.vector4d(((mp.az - 180 + 540) % 360) - 180, mp.elev, (1 - Math.cos(2 * Math.PI * ph)) / 2, 0)
 
         // lamps: on below ~3 deg of sun elevation, with a startup stutter on switch-on
         var on = sp.elev < 3
@@ -460,6 +477,7 @@ WallpaperItem {
         property vector4d animal2: Qt.vector4d(0, 0, 0, 0)
         property real localHour: 12
         property vector4d belt: Qt.vector4d(-9, 160, 0, 0)
+        property vector4d moon: Qt.vector4d(0, -90, 0, 0)
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
         // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:

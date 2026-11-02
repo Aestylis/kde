@@ -136,7 +136,7 @@ void main() {
 
     // ---------------- CLOUDS
     gWind = wind;
-    gCover = mix(0.46, 0.36, e) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);                         // lower threshold = more cloud through the night
+    gCover = mix(0.46, 0.36, e) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);                         // lower threshold = more cloud through the night
     float dens = cloudField(p);
     float cloud = smoothstep(0.0, 0.25, dens);
     float cloudAtMoon = smoothstep(0.0, 0.25, cloudField(mc));

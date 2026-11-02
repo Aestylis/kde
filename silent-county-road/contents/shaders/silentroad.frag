@@ -54,6 +54,7 @@ layout(std140, binding = 0) uniform buf {
     float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
     float windDir;   // +1 the wind blows left->right on screen, -1 right->left (live weather)
     float liveCloud; // live cloud cover 0..1, or -1 (procedural)
+    vec4 moon;       // x = azimuth from the view centre (deg, + west / screen-right), y = elevation (deg), z = how lit 0..1
     vec4 belt;       // x = anti-sun point across the screen (0..1 of width, may lie off-screen), y = degrees per screen width
     vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
     float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
@@ -560,7 +561,7 @@ void main() {
     col = mix(col, glow, twi * 0.75 * exp(-sk * 3.0));                             // horizon glow at dawn/dusk
     // clouds: same recipe + lighting as the sky screen, thinning toward the horizon so the two monitors read as one sky
     if (p.y > HZ) {
-        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y)) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);
+        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y)) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);
         float dens = cloudField(p);
         float cl = smoothstep(0.0, 0.25, dens);
         if (cl > 0.0) {
@@ -967,20 +968,26 @@ void main() {
     {
         float sunUp = day * smoothstep(2.0, 10.0, sunElev);
         bool isTree = zTree > 0.0;
-        if (day * smoothstep(1.0, 6.0, sunElev) > 0.01 && (p.y < HZ || isTree)) {
+        float moonK = (1.0 - day) * smoothstep(3.0, 12.0, moon.y) * moon.z;           // moonlight: up, dark sky, how full
+        if ((day * smoothstep(1.0, 6.0, sunElev) > 0.01 || moonK > 0.05) && (p.y < HZ || isTree)) {
             float tg = max(isTree ? zTree : roadT(p.y), 0.015);         // depth: shadows shrink and flatten toward the horizon
             vec2 w = vec2((p.x - VP.x) / tg, 1.0 / tg);                // world position on the ground (lateral, distance)
             vec2 cp = vec2(w.x * 0.07 + time * 0.010, w.y * 0.22);     // drifts the same way as the sky clouds
             float n = fbm(cp) * 0.75 + fbm(cp * 2.1 + 5.0) * 0.35;
-            float cov = mix(0.50, 0.40, e) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);
-            float overcast = (1.0 - 0.6 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.75 * smoothstep(0.7, 1.0, liveCloud) : 1.0);                                    // thick overcast: no distinct shadows
+            float cov = mix(0.50, 0.40, e) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);
+            float overcast = (1.0 - 0.6 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud) : 1.0);                                    // thick overcast: no distinct shadows
             float sh = smoothstep(cov, cov + 0.10, n) * sunUp * overcast;
             // cast shadows: trees, houses, poles and lamp posts throw shadows away from the sun, long when it is low
             if (!isTree && p.y < HZ) {
                 vec2 g = groundW(p.x, tg);
                 float pxm = px1 * WSC / tg;
+                bool bySun = day * smoothstep(1.0, 6.0, sunElev) > 0.01;
                 vec2 dir = normalize(vec2(-(sunX * A - VP.x), -1.0));                  // sun ahead of us: shadows come toward us
                 float tanE = tan(radians(max(sunElev, 2.0)));
+                if (!bySun) {                                                         // the moon can be anywhere: behind us, shadows run away
+                    dir = -vec2(sin(radians(moon.x)), cos(radians(moon.x)));
+                    tanE = tan(radians(max(moon.y, 3.0)));
+                }
                 bool inSh = false;
                 for (int i = 0; i < 6 && !inSh; i++) {
                     float tc = (HZ - LEFT[i].y) / HZ, H = LEFT[i].z * WSC / tc;
@@ -1010,9 +1017,13 @@ void main() {
                 if (!inSh) inSh = inShadow(g, groundW(post1, lt1), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm)
                                || inShadow(g, groundW(post2, lt2), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm);
                 if (inSh) {                                                           // snow in sun-shadow is a clear sky-blue
-                    float cs = 0.9 * day * smoothstep(1.0, 6.0, sunElev) * (1.0 - 0.45 * smoothstep(0.6, 0.95, e));
-                    col = mix(col, col * vec3(0.56, 0.65, 0.90), cs);
+                    float cs = bySun ? 0.9 * day * smoothstep(1.0, 6.0, sunElev) * (1.0 - 0.45 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud) : 1.0)
+                                     : 0.95 * moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud) : 1.0);   // gone under cloud
+                    col = mix(col, col * (bySun ? vec3(0.56, 0.65, 0.90) : vec3(0.42, 0.50, 0.80)), cs);
                     sh *= 0.4;                                                        // don't stack the cloud shade on top
+                } else if (!bySun) {                                                  // moonlit snow glows; the shadows stay dark
+                    float mk = moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud) : 1.0);
+                    col = col * (1.0 + 0.85 * mk) * mix(vec3(1.0), vec3(0.92, 0.98, 1.10), mk);
                 }
                 // glitter: ice crystals catching the sun. Sparse candidates on sunlit open snow, each flashing briefly
                 // on its own rhythm; fewer in the distance (a pixel there covers far more snow, and glints are tiny)
@@ -1045,8 +1056,8 @@ void main() {
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
     col = mix(col, fogCol, clamp(fog * houseFog, 0.0, 0.75));
-    col = mix(col, col * vec3(1.06, 0.93, 0.74), beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
-    col += vec3(0.95, 0.60, 0.26) * beam * (0.13 + 0.06 * snowAmt + 0.06 * fogAmt);   // the beam: lit snow-haze in the air, only ever brightens
+    col = mix(col, col * vec3(1.06, 0.93, 0.74), 0.75 * beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
+    col += vec3(0.95, 0.60, 0.26) * beam * (0.10 + 0.045 * snowAmt + 0.045 * fogAmt);   // a little see-through   // the beam: lit snow-haze in the air, only ever brightens
 
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
