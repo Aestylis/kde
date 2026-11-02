@@ -152,8 +152,11 @@ const vec3 PAL_DAWN[23] = vec3[23](
     vec3(0.300, 0.270, 0.300),
     vec3(0.540, 0.200, 0.180), vec3(0.340, 0.130, 0.130));
 const vec3 PAL_TAIL = vec3(0.702, 0.235, 0.188);
-vec3 quantize(vec3 c, vec2 q) {
-    c += (bayer4(q) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
+// interleaved gradient noise (Jimenez): blue-noise-like thresholds from one line, no texture. Used for the sky, clouds and
+// mountains, where Bayer's crosshatch shows in smooth gradients; objects keep Bayer's crisp pattern (as in Obra Dinn).
+float ign(vec2 q) { return fract(52.9829189 * fract(dot(q, vec2(0.06711056, 0.00583715)))); }
+vec3 quantize(vec3 c, vec2 q, bool env) {
+    c += ((env ? ign(q) : bayer4(q)) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
     float bd = 1e9; vec3 best = vec3(0.0);
     for (int i = 0; i < 23; i++) {
         vec3 pc = mix(mix(PAL_NIGHT[i], PAL_DAY[i], day), mix(PAL_DUSK[i], PAL_DAWN[i], rising), twi * 0.85);
@@ -1136,5 +1139,5 @@ void main() {
         col = mix(col, fc, vis);
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol : quantize(col, q), 1.0) * qt_Opacity;
+    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol : quantize(col, q, p.y > HZ && zTree < 0.0), 1.0) * qt_Opacity;
 }
