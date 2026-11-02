@@ -255,7 +255,8 @@ WallpaperItem {
         // snow timeline
         var e = 0, cover = 0, plough = -1
         var wire = 0, meltStart = -2                       // wire snow; meltStart < -1 = not shedding
-        if (erosionMode === 1) { e = 0; cover = 0 }
+        var trees = 1                                      // snow on the spruces: builds overnight, melts by day to ~0.4
+        if (erosionMode === 1) { e = 0; cover = 0; trees = 0.4 }
         else if (erosionMode === 2) { e = 1; cover = 1; wire = 1 }
         else {
             var nightLen = times.rise + 1440 - times.set
@@ -268,12 +269,14 @@ WallpaperItem {
                 cover = 0.03 + 0.12 * smooth(P + 60, times.set, m)
                 // wires keep last night's snow, shedding it in sections from ~1 h after sunrise over ~4 h
                 wire = peak
+                trees = 0.4 + 0.6 * peak * (1 - smooth(times.rise + 60, times.rise + 420, m))   // melts over ~6 h of daylight
                 var nowLocalSec = m * 60
                 meltStart = ((clockSeconds() - (nowLocalSec - (times.rise + 60) * 60)) % 86400 + 86400) % 86400
             } else {
                 e = build
                 cover = build
                 wire = build
+                trees = 0.4 + 0.6 * build
                 if (m >= P && m < P + 2) plough = (m - P) / 2                    // the plough's two minutes
             }
         }
@@ -283,6 +286,7 @@ WallpaperItem {
         else if (forcedPloughMs > 0 && fp > 1 && fp < 1.5) cover = Math.min(cover, 0.03)   // stays clear a while after
         fx.erosion = e
         fx.wireSnow = wire
+        fx.treeSnow = trees
         fx.meltStart = meltStart
         fx.roadCover = cover
         fx.plough = plough
@@ -340,6 +344,7 @@ WallpaperItem {
         property vector4d birds: Qt.vector4d(-1, 0, 0, 0)
         property real birdSeed: 0
         property real wireSnow: 0
+        property real treeSnow: 1
         property real meltStart: -2
         property real meltDur: 4 * 3600
         property vector4d animal: Qt.vector4d(-99, 0, 0, 0)

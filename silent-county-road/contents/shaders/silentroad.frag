@@ -5,7 +5,8 @@
 //   SCENE  sky, tree lines (far: procedural; groves + near: grown spruces from images/trees.png), road + snowbanks, poles, wire, streetlamps, fence (static, from fixed layout + hashes)
 //   LIGHT  two warm lamp pools / cones / halos
 //   FOG    slow value-noise fog, thickest near the horizon, warmed inside lamplight
-//   SNOW   hash-generated flakes in 3 depth layers + rare near flakes; nearly invisible unless lamp-lit
+//   SNOW   hash-generated flakes in 3 depth layers + rare near flakes; nearly invisible unless lamp-lit; one shared
+//          gusty wind (windX / gustAt) drifts the flakes, sways the trees, bends the smoke and lifts blowing snow
 //   WIND   slow "moods" from layered low-frequency noise (calm / drift / whisper gust)
 //   FLICKER lamps burn steady, then rarely stutter for a few seconds (the far lamp is the dying one)
 //   WINTER `erosion` (0..1, driven by the real clock) thickens fog, softens the road edge, buries the fence,
@@ -50,6 +51,7 @@ layout(std140, binding = 0) uniform buf {
     float meltDur;
     vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 fox)
     vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
+    float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
     float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
     vec2 res;        // item size
 };
@@ -70,6 +72,20 @@ uint pcg(uint v) { uint st = v * 747796405u + 2891336453u; uint w = ((st >> ((st
 float uh(vec2 c, float salt) { ivec2 i = ivec2(floor(c)); return float(pcg(uint(i.x) * 1973u ^ pcg(uint(i.y) * 9277u + uint(salt)))) / 4294967295.0; }
 float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { v += a * vnoise(p); p = p * 2.03 + 7.1; a *= 0.5; } return v; }
 float noise1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(hash11(i), hash11(i + 1.0), f); }
+// ---- one wind for the whole scene: windX = how far the air has carried things (pixels, at the snow's scale), and
+//      gustAt = how hard it is blowing right now (0 calm .. 1 strong gust). Snow drifts by windX; trees, smoke and
+//      blowing ground snow follow gustAt. Sampled with a delay by screen x, a gust visibly travels across the scene.
+float wnoise(float x, uint salt) {                      // integer-hashed 1D value noise: identical on every GPU
+    float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(float(pcg(uint(i) + salt)) / 4294967295.0, float(pcg(uint(i) + 1u + salt)) / 4294967295.0, f);
+}
+float windX(float t) {                                  // steady drift + wander, never blowing backwards
+    return windAmt * (t * 2.4 + 41.0 * wnoise(t / 40.0, 7001u) + 5.0 * wnoise(t / 9.0, 9113u));
+}
+float gustAt(float t) {
+    float v = (windX(t + 0.5) - windX(t - 0.5)) / max(windAmt, 1e-3);   // px/s at wind 1: ~1.1 lull .. 2.4 mean .. 3.6 gust
+    return clamp((v - 2.4) / 1.2, -0.5, 1.0);
+}
 float bayer4(vec2 q) {
     int x = int(mod(q.x, 4.0)), y = int(mod(q.y, 4.0));
     int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
@@ -218,13 +234,21 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
     float sc = float(bh) / hpx;
     int ix = int(floor((p.x - cx) / px1 * sc + float(bw) * 0.5));
     int iy = int(floor((p.y - gy) / px1 * sc));
-    if (ix < 0 || iy < 0 || ix >= bw || iy >= bh) return false;
+    if (iy < 0 || iy >= bh) return false;
+    if (windAmt > 0.01) {                                   // sway: tops move, trunk base stays planted; whole texels only
+        float hgt = float(iy) / float(bh);
+        float g = gustAt(time - cx * 2.0);
+        float lean = 0.25 + 0.75 * g + 0.12 * sin(time * (1.4 + 0.4 * hash11(seed)) + seed * 5.0) * (0.4 + g);
+        ix -= int(floor(0.020 * float(bh) * min(windAmt, 2.0) * hgt * hgt * lean + 0.5));
+    }
+    if (ix < 0 || ix >= bw) return false;
     int v = int(hash11(seed * 1.37 + 0.5) * 11.999);
     bool flip = hash11(seed * 2.71 + 3.0) < 0.5;
     if (flip) ix = bw - 1 - ix;
     tx = texelFetch(treeAtlas, ivec2(v * bw + ix, y0 + bh - 1 - iy), 0);
     if (tx.a < 0.5) return false;
     if (flip) tx.r = 1.0 - tx.r;
+    tx.a = uh(vec2(float(ix / 3), float(iy / 2)), seed * 3.0 + float(b));   // clump hash: snow melts in patches, not specks
     return true;
 }
 
@@ -482,7 +506,8 @@ void main() {
         float snz = sqrt(max(0.0, 1.0 - snx * snx - sny * sny)); \
         float dif = clamp(dot(vec2(snx, sny), Ld) * 0.85 + snz * 0.30, 0.0, 1.0); \
         vec3 c = mix(darkCol, litCol * 1.15, dif) * mix(0.50, 1.08, sao); \
-        if (smat == 1) \
+        float rank = clamp((sao - 0.6) / 0.4, 0.0, 1.0) * 0.35 + 0.25 * dif + 0.40 * tx.a; /* sunny, outer clumps melt first */ \
+        if (smat == 1 && rank < treeSnow * 1.08) \
             c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.78, 1.0, sao); \
         else if (smat >= 2) c = mix(darkCol, litCol, dif * 0.6) * vec3(1.30, 1.0, 0.75) * 0.9; \
         col = mix(c, hazeCol, haze); zTree = (tT); }
@@ -546,7 +571,7 @@ void main() {
             float S = 1.1 * hb, dy = p.y - ch.y;
             if (fire && dy > 0.0 && dy < S && tH > zTree) {
                 float k = dy / S;
-                float drift = (0.10 + 0.45 * windAmt) * dy * k + 0.03 * hb * sin(dy / hb * 7.0 - time * 0.7) * k;   // rises, then leans downwind
+                float drift = (0.10 + 0.45 * windAmt * (0.6 + 1.6 * max(gustAt(time - cxH * 2.0), 0.0))) * dy * k + 0.03 * hb * sin(dy / hb * 7.0 - time * 0.7) * k;   // rises, then leans downwind
                 float w = hb * (0.04 + 0.16 * sqrt(k));
                 float dx = abs(p.x - ch.x - drift);
                 float puff = vnoise(vec2((p.x - drift) / hb * 14.0, dy / hb * 9.0 - time * 0.9)) * 0.6
@@ -880,7 +905,7 @@ void main() {
     }
 
     // ---------------- WIND mood: smooth offset whose slope changes like weather
-    float wind = windAmt * (time * 0.8 + 70.0 * noise1(time / 75.0) + 25.0 * noise1(time / 23.0) + 140.0 * pow(noise1(time / 140.0 + 9.0), 4.0));
+    float wind = windX(time);
 
     // ---------------- SNOW (in pixel units; 3 layers + rare near flakes)
     vec2 pp = q + 0.5;
@@ -906,6 +931,17 @@ void main() {
         c.x += sin(time * (0.3 + 0.9 * h.y) + h.y * 40.0) * (0.3 + 1.7 * hash11(h.y * 71.0)) * (1.0 + float(l));   // each flake its own sway       // gentle sway
         float d = length(sp - c);
         if (d < size) flake = max(flake, bright * (l == 3 ? smoothstep(size, size * 0.3, d) : 1.0));
+    }
+    // blowing snow: in strong gusts, low wisps of loose snow stream across the field (sheared, fast, near the ground)
+    if (p.y < HZ - 0.01 && windAmt > 0.01) {
+        float g = gustAt(time - p.x * 2.0);
+        if (g > 0.45) {
+            float tg = roadT(p.y);
+            float sd = vnoise(vec2((pp.x - wind * (1.2 + 2.5 * tg)) / (18.0 + 40.0 * tg), pp.y / (1.5 + 3.0 * tg) + time * 0.15)) * 0.7
+                     + vnoise(vec2((pp.x - wind * (1.6 + 3.0 * tg)) / 7.0, pp.y / 1.2)) * 0.3;
+            float amt = smoothstep(0.45, 0.95, g) * smoothstep(0.55, 0.85, sd) * (0.35 + 0.65 * tg);
+            if (amt > bayer4(q) * 0.9 + 0.08) col = mix(col, DN(vec3(0.42, 0.46, 0.55), vec3(0.97, 0.98, 1.0)), 0.55);
+        }
     }
     if (flake > 0.0) {
         float lit = clamp(L * 1.4, 0.0, 1.0);
