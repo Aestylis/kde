@@ -101,6 +101,13 @@ float gustAt(float t) {
     float v = (windX(t + 0.5) - windX(t - 0.5)) / max(windAmt, 1e-3);   // px/s at wind 1: ~1.1 lull .. 2.4 mean .. 3.6 gust
     return clamp((v - 2.4) / 1.2, -0.5, 1.0);
 }
+// wires swing in the wind: each span's sag breathes with the gusts (blowing toward / away from the viewer), each
+// span on its own rhythm, the gust reaching spans in turn as it crosses the scene
+float wireSwing(float k, float x) {
+    if (windAmt < 0.01) return 1.0;
+    float g = gustAt(time - x * 2.0);
+    return 1.0 + min(windAmt, 2.0) * (0.16 * max(g, 0.0) + 0.07 * sin(time * (1.1 + 0.3 * hash11(k + 3.1)) + k * 1.7) * (0.35 + max(g, 0.0)));
+}
 float bayer4(vec2 q) {
     int x = int(mod(q.x, 4.0)), y = int(mod(q.y, 4.0));
     int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
@@ -764,7 +771,7 @@ void main() {
             col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
         if (k < 63) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
-            float sag = 0.035 * (P.t + Q.t) / 0.55;
+            float sag = 0.035 * (P.t + Q.t) / 0.55 * wireSwing(float(k), P.base.x);
             bool single = (P.armR.x - P.armL.x) < 2.0 * px1;          // the two wires would merge: draw just one
             if (onWire(p, P.armL, Q.armL, sag) || (!single && onWire(p, P.armR, Q.armR, sag))) col = wireCol;
             snowOnWire(col, p, P.armL, Q.armL, sag, float(k), 0.0, k < 3);
@@ -773,9 +780,10 @@ void main() {
     }
     {   // and back toward the viewer, off the right edge
         Pole P = pole(0);
-        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06)) col = wireBase;
-        snowOnWire(col, p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05, 40.0, 1.0, true);
-        snowOnWire(col, p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06, 41.0, 0.0, true);
+        float sw1 = wireSwing(-1.0, A * 0.8), sw2 = wireSwing(-2.0, A * 0.8);   // the nearest spans swing the most visibly
+        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05 * sw1) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06 * sw2)) col = wireBase;
+        snowOnWire(col, p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05 * sw1, 40.0, 1.0, true);
+        snowOnWire(col, p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06 * sw2, 41.0, 0.0, true);
     }
 
     // ---------------- STREETLAMPS (posts, arms, heads)
@@ -939,7 +947,7 @@ void main() {
     if (birds.x >= 0.0) {
         Pole P0 = pole(0), P1 = pole(1);
         vec2 wa = P0.armL, wb = P1.armL;
-        float wsag = 0.035 * (P0.t + P1.t) / 0.55;
+        float wsag = 0.035 * (P0.t + P1.t) / 0.55 * wireSwing(0.0, P0.base.x);
         float tB = birds.x;
         for (int i = 0; i < 7; i++) {
             if (float(i) >= birds.y) break;
