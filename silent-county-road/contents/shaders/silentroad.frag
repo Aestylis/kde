@@ -331,7 +331,7 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
 
 // one vehicle from the car atlas: square box bw across (uv), wheels on the bottom row at yb, centred on xc.
 // idx = type * 2 + (oncoming ? 1 : 0). tx = the texel (normal, material, ao); ip = its pixel in the 88-px frame.
-bool carSprite(vec2 p, float yb, float xc, float bw, int idx, out vec4 tx, out vec2 ip) {
+bool carSprite(vec2 p, float yb, float xc, float bw, int idx, bool flip, out vec4 tx, out vec2 ip) {
     tx = vec4(0.0); ip = vec2(0.0);
     if (p.y < yb || p.y > yb + bw || abs(p.x - xc) > 0.5 * bw) return false;
     float bpx = bw / px1;
@@ -341,7 +341,9 @@ bool carSprite(vec2 p, float yb, float xc, float bw, int idx, out vec4 tx, out v
     float sc = float(bh) / bpx;
     int ix = int(floor((p.x - xc) / px1 * sc + float(bh) * 0.5)), iy = int(floor((p.y - yb) / px1 * sc));
     if (ix < 0 || iy < 0 || ix >= bh || iy >= bh) return false;
+    if (flip) ix = bh - 1 - ix;
     tx = texelFetch(carAtlas, ivec2(idx * bh + ix, y0 + bh - 1 - iy), 0);
+    if (flip) tx.r = 1.0 - tx.r;
     ip = vec2(ix, iy) * (88.0 / float(bh));
     return tx.a > 0.5;
 }
@@ -1113,7 +1115,9 @@ void main() {
         float hv = wv * (vtype == 2 ? 1.05 : vtype == 1 ? 0.95 : 0.80);
         bool lit = lamps > 0.5;
         vec4 ctx; vec2 cip;
-        if (carSprite(p, yb, xc, wv * 4.3 / 1.75, vtype * 2 + (away ? 0 : 1), ctx, cip)) {
+        // the vehicle lies along its lane, which runs toward the vanishing point: if that is up-left of it, its far end
+        // (the nose going away, the tail when oncoming) points left, so mirror the baked view (whose far end points right)
+        if (carSprite(p, yb, xc, wv * 4.3 / 1.75, vtype * 2 + (away ? 0 : 1), VP.x < xc, ctx, cip)) {
             float cb = floor(ctx.b * 255.0 + 0.5);
             int cm = int(cb / 32.0); float cao = mod(cb, 32.0) / 31.0;
             float cnx = ctx.r * 2.0 - 1.0, cny = ctx.g * 2.0 - 1.0, cnz = sqrt(max(0.0, 1.0 - cnx * cnx - cny * cny));
