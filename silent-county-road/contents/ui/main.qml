@@ -241,6 +241,7 @@ WallpaperItem {
         fx.day = smooth(-8, 6, sp.elev)
         fx.twi = Math.exp(-Math.pow((sp.elev - 1) / 5.5, 2))
         fx.rising = m < 12 * 60 ? 1 : 0
+        fx.localHour = m / 60
         fx.sunX = Math.max(-0.2, Math.min(1.2, 0.08 + 0.84 * (sp.az - times.azRise) / Math.max(1, times.azSet - times.azRise)))
 
         // lamps: on below ~3 deg of sun elevation, with a startup stutter on switch-on
@@ -303,10 +304,18 @@ WallpaperItem {
         smooth: false
     }
 
+    Image {                                   // farmhouse, cabin, barn, cottage: relit in the shader (tools/gen_houses.py)
+        id: houseAtlasImg
+        source: Qt.resolvedUrl("../images/houses.png")
+        visible: false
+        smooth: false
+    }
+
     ShaderEffect {
         id: fx
         property var atlas: wildlifeAtlas
         property var treeAtlas: treeAtlasImg
+        property var houseAtlas: houseAtlasImg
         anchors.fill: parent
         property real time: main.clockSeconds()
         // block size in PHYSICAL pixels, so a scaled monitor gets the same-size pixels as an unscaled one
@@ -335,6 +344,7 @@ WallpaperItem {
         property real meltDur: 4 * 3600
         property vector4d animal: Qt.vector4d(-99, 0, 0, 0)
         property vector4d animal2: Qt.vector4d(0, 0, 0, 0)
+        property real localHour: 12
         property size res: Qt.size(width, height)
         fragmentShader: Qt.resolvedUrl(main.scene === 1 ? "../shaders/sky.frag.qsb" : "../shaders/silentroad.frag.qsb")
         // Render at ART resolution (one fragment per pixel-art pixel) and scale up with nearest filtering:

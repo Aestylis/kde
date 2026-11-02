@@ -50,9 +50,11 @@ layout(std140, binding = 0) uniform buf {
     float meltDur;
     vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 fox)
     vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
+    float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
     vec2 res;        // item size
 };
 layout(binding = 1) uniform sampler2D atlas;     // wildlife sprite atlas (see contents/images/CREDITS.md)
+layout(binding = 3) uniform sampler2D houseAtlas; // farmhouse, cabin, barn, cottage: normal, material*32+ao / window id (tools/gen_houses.py)
 layout(binding = 2) uniform sampler2D treeAtlas; // grown spruces: normal.xy, material*64+ao, coverage (tools/gen_trees.py)
 
 // ------------------------------------------------------------------ utilities
@@ -75,41 +77,45 @@ float bayer4(vec2 q) {
 }
 
 // ---- palettes: one hand-picked 16-colour set per phase; the active palette blends between them each frame
-//      (night <-> day by sun height, then toward dusk or dawn during twilight); entries 16-19 are each phase's sky blues.
+//      (night <-> day by sun height, then toward dusk or dawn during twilight); entries 16-19 are each phase's sky blues, 21-22 barn reds.
 //      PAL_TAIL is reserved for the plough.
-const vec3 PAL_NIGHT[21] = vec3[21](
+const vec3 PAL_NIGHT[23] = vec3[23](
     vec3(0.027, 0.035, 0.051), vec3(0.051, 0.067, 0.094), vec3(0.075, 0.098, 0.145), vec3(0.106, 0.133, 0.192),
     vec3(0.137, 0.173, 0.239), vec3(0.176, 0.216, 0.286), vec3(0.227, 0.271, 0.349), vec3(0.290, 0.337, 0.420),
     vec3(0.369, 0.416, 0.502), vec3(0.463, 0.510, 0.604), vec3(0.580, 0.627, 0.714), vec3(0.765, 0.796, 0.847),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
     vec3(0.050, 0.070, 0.140), vec3(0.080, 0.110, 0.220), vec3(0.120, 0.170, 0.320), vec3(0.200, 0.270, 0.450),
-    vec3(0.070, 0.090, 0.100));
-const vec3 PAL_DAY[21] = vec3[21](
+    vec3(0.070, 0.090, 0.100),
+    vec3(0.290, 0.105, 0.095), vec3(0.170, 0.070, 0.070));
+const vec3 PAL_DAY[23] = vec3[23](
     vec3(0.100, 0.120, 0.120), vec3(0.160, 0.200, 0.190), vec3(0.205, 0.210, 0.220), vec3(0.300, 0.330, 0.360),
     vec3(0.400, 0.440, 0.480), vec3(0.480, 0.520, 0.570), vec3(0.580, 0.630, 0.690), vec3(0.660, 0.710, 0.770),
     vec3(0.740, 0.780, 0.830), vec3(0.820, 0.850, 0.890), vec3(0.890, 0.910, 0.940), vec3(0.950, 0.960, 0.970),
     vec3(0.550, 0.330, 0.140), vec3(0.800, 0.520, 0.200), vec3(0.450, 0.460, 0.480), vec3(1.000, 0.800, 0.450),
     vec3(0.300, 0.460, 0.740), vec3(0.420, 0.580, 0.830), vec3(0.560, 0.690, 0.880), vec3(0.700, 0.800, 0.930),
-    vec3(0.270, 0.340, 0.280));
-const vec3 PAL_DUSK[21] = vec3[21](
+    vec3(0.270, 0.340, 0.280),
+    vec3(0.560, 0.170, 0.130), vec3(0.370, 0.120, 0.100));
+const vec3 PAL_DUSK[23] = vec3[23](
     vec3(0.050, 0.050, 0.090), vec3(0.090, 0.090, 0.150), vec3(0.140, 0.130, 0.210), vec3(0.200, 0.180, 0.280),
     vec3(0.280, 0.240, 0.340), vec3(0.380, 0.300, 0.380), vec3(0.500, 0.380, 0.420), vec3(0.640, 0.460, 0.420),
     vec3(0.780, 0.540, 0.380), vec3(0.900, 0.620, 0.360), vec3(0.960, 0.740, 0.480), vec3(0.990, 0.860, 0.640),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
     vec3(0.080, 0.100, 0.220), vec3(0.130, 0.170, 0.340), vec3(0.200, 0.250, 0.460), vec3(0.300, 0.360, 0.580),
-    vec3(0.360, 0.260, 0.220));
-const vec3 PAL_DAWN[21] = vec3[21](
+    vec3(0.360, 0.260, 0.220),
+    vec3(0.580, 0.210, 0.150), vec3(0.360, 0.130, 0.110));
+const vec3 PAL_DAWN[23] = vec3[23](
     vec3(0.060, 0.060, 0.100), vec3(0.100, 0.110, 0.170), vec3(0.160, 0.170, 0.250), vec3(0.240, 0.250, 0.340),
     vec3(0.340, 0.340, 0.440), vec3(0.460, 0.430, 0.520), vec3(0.600, 0.520, 0.600), vec3(0.740, 0.600, 0.660),
     vec3(0.860, 0.680, 0.660), vec3(0.930, 0.780, 0.700), vec3(0.970, 0.880, 0.800), vec3(0.990, 0.950, 0.900),
     vec3(0.231, 0.188, 0.149), vec3(0.431, 0.329, 0.208), vec3(0.706, 0.541, 0.322), vec3(0.941, 0.827, 0.627),
     vec3(0.090, 0.120, 0.250), vec3(0.150, 0.210, 0.400), vec3(0.240, 0.330, 0.560), vec3(0.380, 0.480, 0.700),
-    vec3(0.300, 0.270, 0.300));
+    vec3(0.300, 0.270, 0.300),
+    vec3(0.540, 0.200, 0.180), vec3(0.340, 0.130, 0.130));
 const vec3 PAL_TAIL = vec3(0.702, 0.235, 0.188);
 vec3 quantize(vec3 c, vec2 q) {
     c += (bayer4(q) - 0.5) * 0.075;     // strong enough to bridge the wider steps in the dusk/dawn palettes
     float bd = 1e9; vec3 best = vec3(0.0);
-    for (int i = 0; i < 21; i++) {
+    for (int i = 0; i < 23; i++) {
         vec3 pc = mix(mix(PAL_NIGHT[i], PAL_DAY[i], day), mix(PAL_DUSK[i], PAL_DAWN[i], rising), twi * 0.85);
         vec3 d = c - pc; float e = dot(d, d * vec3(1.0, 1.25, 0.9));
         if (e < bd) { bd = e; best = pc; }
@@ -220,6 +226,41 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
     if (tx.a < 0.5) return false;
     if (flip) tx.r = 1.0 - tx.r;
     return true;
+}
+
+// one building from the house atlas (box 1.6 x hb wide, ground origin 0.10 hb above the box bottom, at its centre)
+bool houseSprite(vec2 p, float gy, float cx, float hb, int v, bool flip, out vec4 tx) {
+    tx = vec4(0.0);
+    float bot = gy - 0.10 * hb;
+    if (p.y < bot || p.y > bot + hb || abs(p.x - cx) > 0.8 * hb) return false;
+    float hpx = hb / px1;
+    int b = hpx <= 24.0 ? 2 : hpx <= 48.0 ? 1 : 0;
+    int bh = b == 0 ? 96 : b == 1 ? 48 : 24;
+    int y0 = b == 0 ? 0 : b == 1 ? 96 : 144;
+    int bw = int(float(bh) * 1.6);
+    float sc = float(bh) / hpx;
+    int ix = int(floor((p.x - cx) / px1 * sc + float(bw) * 0.5));
+    int iy = int(floor((p.y - bot) / px1 * sc));
+    if (ix < 0 || iy < 0 || ix >= bw || iy >= bh) return false;
+    if (flip) ix = bw - 1 - ix;
+    tx = texelFetch(houseAtlas, ivec2(v * bw + ix, y0 + bh - 1 - iy), 0);
+    if (tx.a < 0.5) return false;
+    if (flip && floor(tx.b * 255.0 / 32.0 + 0.002) != 3.0) tx.r = 1.0 - tx.r;
+    return true;
+}
+// window schedule: 0 dark, 1 lamp-lit, 2 television. Lights come on after dark, go off one by one late in the
+// evening (21:00 - 00:30), a few come on again before dawn; some rooms stay dark all night.
+int windowState(int house, int w) {
+    if (lamps < 0.5) return 0;
+    float s = hash11(float(house) * 13.17 + float(w) * 3.71 + 0.3);
+    if (s < 0.22) return 0;
+    float off = 21.0 + 3.5 * hash11(float(house) * 7.3 + float(w) * 1.9 + 5.0);
+    float morn = 5.0 + 2.2 * hash11(float(house) * 2.9 + float(w) * 4.3 + 9.0);
+    float h = localHour;
+    bool on = h >= 13.0 ? h < off : (h < 4.0 ? h + 24.0 < off : h >= morn);
+    if (!on) return 0;
+    if (s < 0.30 && h >= 18.5 && h < min(off, 23.5)) return 2;
+    return 1;
 }
 
 // distance (in pixels) to a segment
@@ -419,6 +460,9 @@ void main() {
     vec3 darkCol = DN(vec3(0.03, 0.035, 0.05), vec3(0.13, 0.17, 0.16));
     vec3 snowTip = DN(vec3(0.20, 0.23, 0.29), vec3(0.90, 0.92, 0.95));
     float tip = 0.0, tier = 0.0;
+    //                     variant, depth t, lateral offset (world), wall colour
+    const vec4 HOUSES[4] = vec4[4](vec4(0.0, 0.150, 2.6, 0.0), vec4(2.0, 0.165, 5.2, 2.0),
+                                   vec4(1.0, 0.120, -2.4, 1.0), vec4(3.0, 0.080, -4.6, 3.0));
     // shade one tree pixel at depth t
     #define SHADE_TREE(cxT, tT, detail) { \
         float haze = pow(clamp(1.0 - (tT) / 0.42, 0.0, 1.0), 1.4) * 0.80; \
@@ -450,6 +494,72 @@ void main() {
     float tipB = 0.0;
     float farB = spruces(p, HZ - 0.012, 0.024, 0.030, 0.060, 23.0, VP.x, 0.06, tipB);
     if (farB > 0.5 && 0.03 > zTree) { tip = tipB; tier = 0.5; SHADE_TREE(p.x, 0.03, false) }
+    // ---------------- HOUSES: a farmhouse + barn across the field on the right, a cabin and a cottage far off on the left.
+    // Relit like the trees; windows on their own schedules; chimney smoke rising and leaning with the wind.
+    const vec3 CHIM[4] = vec3[4](vec3(0.2244, 0.9007, 1.0), vec3(-0.2827, 0.7336, 1.0), vec3(0.0, 0.0, 0.0), vec3(0.0, 0.6542, 1.0));
+    float houseFog = 1.0;                         // houses (and lit windows even more) cut through the fog
+    for (int i = 0; i < 4; i++) {
+        float tH = HOUSES[i].y;
+        if (tH <= zTree) continue;
+        float gy = HZ - tH * HZ;
+        float lat = HOUSES[i].z;
+        float cxH = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tH;
+        float hb = 0.92 * tH;
+        bool flip = lat > 0.0;                        // show the side that faces the road
+        int v = int(HOUSES[i].x);
+        float haze = pow(clamp(1.0 - tH / 0.42, 0.0, 1.0), 1.4) * 0.38;   // solid buildings: less washed out than foliage
+        vec4 tx;
+        if (houseSprite(p, gy, cxH, hb, v, flip, tx)) {
+            float hb8 = floor(tx.b * 255.0 + 0.5);
+            int mat = int(hb8 / 32.0); float hao = mod(hb8, 32.0) / 31.0;
+            float hnx = tx.r * 2.0 - 1.0, hny = tx.g * 2.0 - 1.0;
+            float latL = clamp((lightX - cxH) * 2.0, -1.0, 1.0);
+            vec2 Ld = normalize(vec2(latL * (0.35 + 0.85 * lightLow), 1.0 - 0.45 * lightLow));
+            float hnz = sqrt(max(0.0, 1.0 - hnx * hnx - hny * hny));
+            float dif = clamp(dot(vec2(hnx, hny), Ld) * 0.85 + hnz * 0.35, 0.0, 1.0);
+            vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(1.0, 0.98, 0.95)) * (DN(vec3(0.45), vec3(0.68)) + 0.62 * dif) * mix(0.70, 1.0, hao);   // snow bounce fills the shade by day
+            light = mix(light, light * glow * 1.4, twi * 0.5);
+            int wc = int(HOUSES[i].w);
+            vec3 wall = wc == 0 ? vec3(0.80, 0.78, 0.72) : wc == 1 ? vec3(0.40, 0.27, 0.17) : wc == 2 ? vec3(0.62, 0.12, 0.08) : vec3(0.78, 0.70, 0.47);
+            vec3 c;
+            float hz = haze;
+            if (mat == 2) c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.8, 1.0, hao);
+            else if (mat == 3) {
+                int ws = windowState(i, int(floor(tx.r * 255.0 / 16.0)));
+                if (ws == 1) { c = vec3(1.0, 0.78, 0.42); hz = haze * 0.3; }
+                else if (ws == 2) { c = vec3(0.50, 0.62, 1.0) * (0.65 + 0.35 * vnoise(vec2(time * 5.0, float(i)))); hz = haze * 0.3; }
+                else c = DN(vec3(0.04, 0.05, 0.08), vec3(0.30, 0.36, 0.44));
+            }
+            else {
+                vec3 alb = mat == 0 ? wall : mat == 1 ? vec3(0.22, 0.20, 0.21) : mat == 4 ? vec3(0.86, 0.86, 0.82)
+                         : mat == 5 ? vec3(0.30, 0.15, 0.10) : mat == 6 ? vec3(0.46, 0.40, 0.37) : vec3(0.10, 0.10, 0.11);
+                c = alb * light;
+            }
+            col = mix(c, hazeCol, hz); zTree = tH; houseFog = hz < haze ? 0.15 : 0.45;
+        }
+        // chimney smoke: a plume of drifting noise puffs, widening and fading as it rises, leaning downwind
+        if (CHIM[v].z > 0.5) {
+            float h = localHour;
+            bool fire = v == 1 || (v == 0 && h >= 6.0 && h < 23.0) || (v == 3 && (h >= 16.0 || h < 1.0 || (h >= 6.0 && h < 10.0)));
+            float sx = flip ? -CHIM[v].x : CHIM[v].x;
+            vec2 ch = vec2(cxH + sx * hb, gy - 0.10 * hb + CHIM[v].y * hb);
+            float S = 1.1 * hb, dy = p.y - ch.y;
+            if (fire && dy > 0.0 && dy < S && tH > zTree) {
+                float k = dy / S;
+                float drift = (0.10 + 0.45 * windAmt) * dy * k + 0.03 * hb * sin(dy / hb * 7.0 - time * 0.7) * k;   // rises, then leans downwind
+                float w = hb * (0.04 + 0.16 * sqrt(k));
+                float dx = abs(p.x - ch.x - drift);
+                float puff = vnoise(vec2((p.x - drift) / hb * 14.0, dy / hb * 9.0 - time * 0.9)) * 0.6
+                           + vnoise(vec2((p.x - drift) / hb * 30.0, dy / hb * 20.0 - time * 1.6)) * 0.4;
+                float dens = smoothstep(w, w * 0.3, dx) * (1.0 - k) * (0.55 + 0.75 * puff);
+                if (dens > 0.38 + 0.5 * bayer4(q)) {
+                    vec3 sm = DN(vec3(0.27, 0.29, 0.36), vec3(0.80, 0.81, 0.84));
+                    sm = mix(sm, sm * glow * 1.3, twi * 0.4);
+                    col = mix(mix(col, sm, 0.75), hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6;
+                }
+            }
+        }
+    }
     // middle groves: both sides, set back from the road, perspective-scaled (height and offset proportional to t)
     for (int side = 0; side < 2; side++) {
         for (int i = 0; i < 12; i++) {
@@ -458,6 +568,9 @@ void main() {
             if (tT <= zTree) continue;
             float gy = HZ - tT * HZ;
             float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
+            bool yard = false;                                                      // keep the house yards clear of trees
+            for (int hI = 0; hI < 4; hI++) if (abs(tT - HOUSES[hI].y) < 0.035 && abs(lat - HOUSES[hI].z) < 1.9) yard = true;
+            if (yard) continue;
             float cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
             float h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
             vec4 tx;
@@ -619,7 +732,7 @@ void main() {
     float fog = fogAmt * (0.22 + 0.55 * e) * fogH * (0.55 + 0.45 * n);
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
-    col = mix(col, fogCol, clamp(fog, 0.0, 0.75));
+    col = mix(col, fogCol, clamp(fog * houseFog, 0.0, 0.75));
     col = mix(col, col * vec3(1.06, 0.93, 0.74), beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
     col += vec3(0.95, 0.60, 0.26) * beam * (0.13 + 0.06 * snowAmt + 0.06 * fogAmt);   // the beam: lit snow-haze in the air, only ever brightens
 
