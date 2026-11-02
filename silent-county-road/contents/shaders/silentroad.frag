@@ -562,7 +562,7 @@ void main() {
     float halo = lightSteps(max(h1 * f1, h2 * f2), 3.0, q);
     float beam = lightSteps(c1 * f1, 2.0, q);
     pool = lightSteps(pool, 4.0, q);
-    float L = max(pool, beam * 0.8);           // what lit surfaces / flakes / animals see
+    float L = max(pool, beam * 0.5);           // what lit surfaces / flakes / animals see (the beam is light passing through air)
     vec3 warm = vec3(0.86, 0.66, 0.40);
 
     // ---------------- SKY
@@ -1066,10 +1066,10 @@ void main() {
     float n = vnoise(vec2(p.x * 3.0 + time * 0.006, p.y * 9.0 - time * 0.0015)) * 0.6 + vnoise(vec2(p.x * 9.0 - time * 0.01, p.y * 20.0)) * 0.4;
     float fog = fogAmt * (0.22 + 0.55 * e) * fogH * (0.55 + 0.45 * n);
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
-    vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
+    vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(max(pool * 0.8, beam * 0.25), 0.0, 0.6));   // only the pool warms the fog, not the whole beam
     col = mix(col, fogCol, clamp(fog * houseFog, 0.0, 0.75));
-    col = mix(col, col * vec3(1.06, 0.93, 0.74), 0.75 * beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
-    col += vec3(0.95, 0.60, 0.26) * beam * (0.10 + 0.045 * snowAmt + 0.045 * fogAmt);   // a little see-through   // the beam: lit snow-haze in the air, only ever brightens
+    col = mix(col, col * vec3(1.06, 0.93, 0.74), 0.6 * beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
+    col += vec3(0.95, 0.60, 0.26) * beam * (0.09 + 0.04 * snowAmt + 0.04 * fogAmt);   // see-through: the scene shows in it   // the beam: lit snow-haze in the air, only ever brightens
 
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
