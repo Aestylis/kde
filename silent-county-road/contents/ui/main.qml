@@ -145,6 +145,50 @@ WallpaperItem {
         fx.tracks = Qt.vector4d(tr, tl, 0, 0)
     }
 
+    // ------------------------------------------------------------------ wind knocking snow off the wires
+    // An exact copy of the shader's wind (same integer hash), so QML knows when the gusts hit. The strongest gust since
+    // sunset sets a "knock level": every wire section whose fragility is below it has been shaken loose and stays bare
+    // until the night's snow rebuilds it. Rebuilt by scanning the day on startup, then tracked tick by tick.
+    function pcg(v) {
+        var st = (Math.imul(v >>> 0, 747796405) + 2891336453) >>> 0
+        var w = Math.imul(((st >>> ((st >>> 28) + 4)) ^ st) >>> 0, 277803737) >>> 0
+        return ((w >>> 22) ^ w) >>> 0
+    }
+    function wnoise(x, salt) {
+        var i = Math.floor(x), f = x - i
+        f = f * f * (3 - 2 * f)
+        var a = pcg((i + salt) >>> 0) / 4294967295, b = pcg((i + 1 + salt) >>> 0) / 4294967295
+        return a + (b - a) * f
+    }
+    function windXjs(t) { return t * 2.4 + 41 * wnoise(t / 40, 7001) + 5 * wnoise(t / 9, 9113) }
+    function gustJs(t) { return Math.max(-0.5, Math.min(1, (windXjs(t + 0.5) - windXjs(t - 0.5) - 2.4) / 1.2)) }
+    function knockLevel(epochSec) {
+        if (windAmt < 0.01) return 0
+        var c = epochSec % 86400 - 0.8 * 2.0 * Math.max(1, width / Math.max(1, height))   // the wires' place in the gust's path
+        return Math.max(0, Math.min(1, (gustJs(c) - 0.45) / 0.55)) * 0.45 * Math.min(windAmt, 1.5)
+    }
+    property real knockFrom: -1
+    property real knockMax: 0
+    property var knockHist: []
+    function updateWindKnock() {
+        var nowMs = Date.now(), now = nowMs / 1000
+        var d = new Date(nowMs)
+        var localSec = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
+        var back = localSec - times.set * 60
+        if (back < 0) back += 86400
+        var setEpoch = Math.floor(now - back)                                  // the last sunset: fresh snow starts building
+        if (setEpoch !== knockFrom) {
+            knockFrom = setEpoch; knockMax = 0
+            for (var t = setEpoch; t < now; t += 3) knockMax = Math.max(knockMax, knockLevel(t))
+            knockHist = [[now, knockMax]]
+        }
+        knockMax = Math.max(knockMax, knockLevel(now))
+        var h = knockHist; h.push([now, knockMax])
+        while (h.length > 2 && h[1][0] <= now - 1.6) h.shift()
+        knockHist = h
+        fx.windKnock = Qt.vector4d(knockMax, h[0][1], 0, 0)
+    }
+
     // ------------------------------------------------------------------ birds
     // 8-minute slots; a flock (3-7) may arrive by day / dusk, perch 1-4 minutes, then leave.
     readonly property int birdSlot: 480
@@ -347,6 +391,7 @@ WallpaperItem {
         property real treeSnow: 1
         property real meltStart: -2
         property real meltDur: 4 * 3600
+        property vector4d windKnock: Qt.vector4d(0, 0, 0, 0)
         property vector4d animal: Qt.vector4d(-99, 0, 0, 0)
         property vector4d animal2: Qt.vector4d(0, 0, 0, 0)
         property real localHour: 12
@@ -373,7 +418,7 @@ WallpaperItem {
         interval: Math.round(1000 / Math.max(5, main.fps))
         running: true
         repeat: true
-        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds(); main.updateAnimal() } }
+        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds(); main.updateAnimal(); main.updateWindKnock() } }
     }
     Timer {                                   // the day moves slowly: sun, lamps, snow timeline every 2 s
         interval: 2000

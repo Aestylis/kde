@@ -52,6 +52,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 fox)
     vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
     float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
+    vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
     float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
     vec2 res;        // item size
 };
@@ -322,10 +323,16 @@ void snowOnWire(inout vec3 col, vec2 p, vec2 a, vec2 b, float sag, float span, f
     float hs = hash11(seg * 7.13 + span * 13.31 + w * 3.77);
     float since = mod(time - meltStart + 43200.0, 86400.0) - 43200.0 - hs * meltDur;   // s since this section dropped
     bool fallen = meltStart > -1.0 && since > 0.0;
+    float frag = hash11(seg * 5.71 + span * 9.13 + w * 2.93 + 0.7);                   // how easily the wind shakes it loose
+    if (frag < windKnock.x) {                                                           // knocked off by a gust
+        fallen = true;
+        if (frag >= windKnock.y) since = 1.6 * (windKnock.x - frag) / max(windKnock.x - windKnock.y, 1e-4);   // just now
+        else since = max(since, 99.0);
+    }
     float thick = (near && wireSnow > 0.6) ? 2.0 : 1.0;
     if (!fallen && wireSnow > 0.12 && p.y > yw + 0.5 * px1 && p.y < yw + (0.5 + thick) * px1)
         col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));
-    if (near && meltStart > -1.0 && since > 0.0 && since < 1.6 && wireSnow > 0.12) {
+    if (near && fallen && since > 0.0 && since < 1.6 && wireSnow > 0.12) {
         float cy = yw - 0.30 * since * since;                                          // gravity
         float spread = since * 2.5;                                                     // px: the clump breaks up
         vec2 dd = vec2(p.x - (a.x + (seg + 0.5) / 14.0 * (b.x - a.x)), p.y - cy) / px1;
