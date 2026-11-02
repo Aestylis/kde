@@ -166,6 +166,53 @@ vec3 quantize(vec3 c, vec2 q, bool env) {
     return best;
 }
 
+// ---- shading ramps (LutLight-style, generated): a material pixel may only take one of its own ramp steps. Six steps from
+//      deep shadow (lit by the sky: cool) to highlight (lit by the sun: warm) give the painter's hue shift for a physical
+//      reason; the sky / sun colours follow the clock (day: sky-blue / warm white, night: navy / moonlight, twilight:
+//      violet / orange or rose), so every ramp re-tints itself. Plus two haze blends (distance), the haze and fog colours,
+//      and warm lamplit steps under a lamp. Sky, clouds, mountains, lit windows, vehicles, animals keep the global palette.
+bool useRamp = false;                     // set by materials that use ramps; cleared by anything drawn over them
+vec3 rampAlb = vec3(0.0);
+const vec3 ALB_SNOW   = vec3(0.94, 0.96, 1.00);
+const vec3 ALB_ASPH   = vec3(0.40, 0.42, 0.46);
+const vec3 ALB_SPRUCE = vec3(0.17, 0.27, 0.21);
+const vec3 ALB_BARK   = vec3(0.28, 0.23, 0.20);
+const vec3 ALB_ROOF   = vec3(0.26, 0.24, 0.25);
+const vec3 ALB_TRIM   = vec3(0.88, 0.88, 0.84);
+const vec3 ALB_DOOR   = vec3(0.34, 0.17, 0.11);
+const vec3 ALB_STONE  = vec3(0.50, 0.45, 0.41);
+const vec3 ALB_SOFFIT = vec3(0.14, 0.14, 0.15);
+vec3 rampKey() {
+    vec3 keyD = vec3(1.02, 1.00, 0.95), keyN = vec3(0.27, 0.31, 0.43);
+    vec3 keyT = mix(vec3(1.00, 0.70, 0.48), vec3(0.98, 0.74, 0.74), rising) * 0.88;
+    return mix(mix(keyN, keyD, day), keyT, twi * 0.7);
+}
+vec3 rampShade() {
+    vec3 shD = vec3(0.60, 0.70, 0.92) * 0.82, shN = vec3(0.075, 0.09, 0.15), shT = vec3(0.30, 0.28, 0.46);
+    return mix(mix(shN, shD, day), shT, twi * 0.7);
+}
+float qdist(vec3 c, vec3 pc) { vec3 d = c - pc; return dot(d, d * vec3(1.0, 1.25, 0.9)); }
+vec3 quantizeRamp(vec3 c, vec3 alb, vec2 q, bool env, float lampK, vec3 hz, vec3 fogc) {
+    c += ((env ? ign(q) : bayer4(q)) - 0.5) * 0.075;
+    vec3 key = rampKey(), sh = rampShade();
+    vec3 best = hz; float bd = qdist(c, hz);
+    float dfg = qdist(c, fogc); if (dfg < bd) { bd = dfg; best = fogc; }
+    for (int k = 0; k < 6; k++) {
+        float f = float(k) / 5.0;
+        vec3 pc = alb * mix(sh, key, f) * mix(0.55, 1.12, f);
+        float dd = qdist(c, pc); if (dd < bd) { bd = dd; best = pc; }
+    }
+    vec3 h1 = mix(alb * key * 0.85, hz, 0.5), h2 = mix(alb * sh * 0.8, hz, 0.5);          // distance: halfway into the haze
+    float d1 = qdist(c, h1); if (d1 < bd) { bd = d1; best = h1; }
+    float d2 = qdist(c, h2); if (d2 < bd) { bd = d2; best = h2; }
+    if (lampK > 0.02) {                                                                  // under a lamp: warm lit steps
+        vec3 l1 = alb * vec3(1.00, 0.74, 0.46) * 0.95, l2 = alb * vec3(0.90, 0.60, 0.38) * 0.60;
+        float e1 = qdist(c, l1); if (e1 < bd) { bd = e1; best = l1; }
+        float e2 = qdist(c, l2); if (e2 < bd) { bd = e2; best = l2; }
+    }
+    return clamp(best, 0.0, 1.0);
+}
+
 // night colour -> day colour, by the global `day`
 vec3 DN(vec3 night, vec3 dayc) { return mix(night, dayc, day); }
 
@@ -335,14 +382,14 @@ void snowOnWire(inout vec3 col, vec2 p, vec2 a, vec2 b, float sag, float span, f
     }
     float thick = (near && wireSnow > 0.6) ? 2.0 : 1.0;
     if (!fallen && wireSnow > 0.12 && p.y > yw + 0.5 * px1 && p.y < yw + (0.5 + thick) * px1)
-        col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));
+        useRamp = false, col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));
     if (near && fallen && since > 0.0 && since < 1.6 && wireSnow > 0.12) {
         float cy = yw - 0.30 * since * since;                                          // gravity
         float spread = since * 2.5;                                                     // px: the clump breaks up
         vec2 dd = vec2(p.x - (a.x + (seg + 0.5) / 14.0 * (b.x - a.x)), p.y - cy) / px1;
         if (abs(dd.x) < 1.0 + spread && abs(dd.y) < 1.0 + spread * 0.6) {
             float hp = hash11(floor(dd.x) * 3.1 + floor(dd.y) * 7.7 + seg + span * 11.0);
-            if (hp > 0.35 + 0.12 * spread) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.95, 0.96, 0.97));
+            if (hp > 0.35 + 0.12 * spread) useRamp = false, col = DN(vec3(0.44, 0.48, 0.56), vec3(0.95, 0.96, 0.97));
         }
     }
 }
@@ -617,6 +664,8 @@ void main() {
         // faint drift texture
         snow *= 0.94 + 0.08 * vnoise(vec2(p.x * 40.0, p.y * 140.0));
         col = snow;
+        useRamp = true;
+        rampAlb = mix(ALB_SNOW, ALB_ASPH, road * (1.0 - smoothstep(0.0, 0.45, rc)));   // packed asphalt where ploughed
     }
 
     // ---------------- TREES: far line, middle groves, near framing spruces — depth-sorted, with atmospheric perspective
@@ -637,7 +686,7 @@ void main() {
         if (detail) c *= 0.90 + 0.16 * tier; \
         vec3 tc = side > 0.0 ? snowTip : snowTip * mix(0.75, 0.85, day); \
         c = mix(c, tc, tip * (0.5 + 0.5 * e)); \
-        col = mix(c, hazeCol, haze); zTree = (tT); }
+        col = mix(c, hazeCol, haze); zTree = (tT); useRamp = true; rampAlb = tip * (0.5 + 0.5 * e) > 0.5 ? ALB_SNOW : ALB_SPRUCE; }
     // shade one grown-spruce texel: lit live from its stored normal by the sun / moon side light, darkened by its ao
     #define SHADE_SPRITE(cxT, tT, tx) { \
         float haze = pow(clamp(1.0 - (tT) / 0.42, 0.0, 1.0), 1.4) * 0.80; \
@@ -649,10 +698,11 @@ void main() {
         float dif = clamp(dot(vec2(snx, sny), Ld) * 0.85 + snz * 0.30, 0.0, 1.0); \
         vec3 c = mix(darkCol, litCol * 1.15, dif) * mix(0.50, 1.08, sao); \
         float rank = clamp((sao - 0.6) / 0.4, 0.0, 1.0) * 0.35 + 0.25 * dif + 0.40 * tx.a; /* sunny, outer clumps melt first */ \
-        if (smat == 1 && rank < treeSnow * 1.08) \
-            c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.78, 1.0, sao); \
-        else if (smat >= 2) c = mix(darkCol, litCol, dif * 0.6) * vec3(1.30, 1.0, 0.75) * 0.9; \
-        col = mix(c, hazeCol, haze); zTree = (tT); }
+        vec3 ra = ALB_SPRUCE; \
+        if (smat == 1 && rank < treeSnow * 1.08) { \
+            c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.78, 1.0, sao); ra = ALB_SNOW; } \
+        else if (smat >= 2) { c = mix(darkCol, litCol, dif * 0.6) * vec3(1.30, 1.0, 0.75) * 0.9; ra = ALB_BARK; } \
+        col = mix(c, hazeCol, haze); zTree = (tT); useRamp = true; rampAlb = ra; }
 
     // distant forest: a band of tiny trees on the horizon (t ~ 0.012) and a slightly larger band just in front (t ~ 0.03),
     // sized to match the perspective of the middle groves (tree height ~ 1.1-2.0 x t)
@@ -687,9 +737,10 @@ void main() {
             vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(1.0, 0.98, 0.95)) * (DN(vec3(0.45), vec3(0.68)) + 0.62 * dif) * mix(0.70, 1.0, hao);   // snow bounce fills the shade by day
             light = mix(light, light * glow * 1.4, twi * 0.5);
             int wc = int(HOUSES[i].w);
-            vec3 wall = wc == 0 ? vec3(0.80, 0.78, 0.72) : wc == 1 ? vec3(0.40, 0.27, 0.17) : wc == 2 ? vec3(0.48, 0.11, 0.07) : vec3(0.78, 0.70, 0.47);
+            vec3 wall = wc == 0 ? vec3(0.84, 0.85, 0.84) : wc == 1 ? vec3(0.40, 0.27, 0.17) : wc == 2 ? vec3(0.48, 0.11, 0.07) : vec3(0.78, 0.70, 0.47);
             vec3 c;
             float hz = haze;
+            vec3 hAlb = ALB_SNOW;
             if (mat == 2) c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.8, 1.0, hao);
             else if (mat == 3) {
                 int ws = windowState(i, int(floor(tx.r * 255.0 / 16.0)));
@@ -700,10 +751,11 @@ void main() {
             else {
                 vec3 alb = mat == 0 ? wall : mat == 1 ? vec3(0.22, 0.20, 0.21) : mat == 4 ? vec3(0.86, 0.86, 0.82)
                          : mat == 5 ? vec3(0.30, 0.15, 0.10) : mat == 6 ? vec3(0.46, 0.40, 0.37) : vec3(0.10, 0.10, 0.11);
-                c = alb * light;
+                c = alb * light; hAlb = alb;
                 if (mat == 0 && wc == 2) hz *= 0.35;   // red barn: haze would push it to orange in the palette
             }
             col = mix(c, hazeCol, hz); zTree = tH; houseFog = hz < haze ? 0.15 : 0.45;
+            useRamp = mat != 3; rampAlb = hAlb;                                     // lit / dark glass keeps the palette
         }
         // lee drift: wind-blown snow banks up downwind of the building (to the right), tapering away from the wall
         if (tH > zTree) {
@@ -714,7 +766,7 @@ void main() {
                 float dh = hd * pow(1.0 - u, 1.6) * (0.85 + 0.3 * vnoise(vec2(p.x / px1 * 0.4, float(i))));
                 if (p.y >= gy - 0.012 * hb && p.y < gy + max(dh, 0.5 * px1)) {
                     vec3 dsn = DN(vec3(0.40, 0.44, 0.53), vec3(0.92, 0.94, 0.96)) * (p.y > gy + dh - px1 ? vec3(1.04) : vec3(0.80, 0.86, 1.0));   // bright crest, blue-shaded flank
-                    col = mix(dsn, hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6;
+                    col = mix(dsn, hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6; useRamp = true; rampAlb = ALB_SNOW;
                 }
             }
         }
@@ -736,7 +788,7 @@ void main() {
                 if (dens > 0.38 + 0.5 * bayer4(q)) {
                     vec3 sm = DN(vec3(0.27, 0.29, 0.36), vec3(0.80, 0.81, 0.84));
                     sm = mix(sm, sm * glow * 1.3, twi * 0.4);
-                    col = mix(mix(col, sm, 0.75), hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6;
+                    col = mix(mix(col, sm, 0.75), hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6; useRamp = false;
                 }
             }
         }
@@ -809,9 +861,9 @@ void main() {
             float w = max(px1 * 1.0, 0.007 * t);
             float fade = smoothstep(0.16, 0.02, t) * 0.9;              // far posts dissolve into the horizon haze
             if (fade > 0.86) break;
-            if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) col = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, fade);
+            if (abs(p.x - x) < w * 0.5 && p.y > y && p.y < y + h) useRamp = false, col = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, fade);
             float cap = px1 * (1.0 + 1.5 * e);
-            if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) col = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, fade);
+            if (abs(p.x - x) < w * 0.5 + px1 * 0.5 && p.y >= y + h && p.y < y + h + cap) useRamp = false, col = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, fade);
         }
     }
 
@@ -827,16 +879,16 @@ void main() {
         vec3 wireCol = mix(wireBase, hazeCol, fade);
         if (p.y >= P.base.y && p.y <= P.top.y) {                 // one pixel column per row: never broken
             float xl = mix(P.base.x, P.top.x, (p.y - P.base.y) / (P.top.y - P.base.y));
-            if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) col = poleCol;
+            if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) useRamp = false, col = poleCol;
         }
-        if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
+        if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) useRamp = false, col = poleCol;
         if (k < 3 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + (k == 0 ? 1.2 : 0.6) * e))
-            col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
+            useRamp = false, col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
         if (k < 63) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
             float sag = 0.035 * (P.t + Q.t) / 0.55 * wireSwing(float(k), P.base.x);
             bool single = (P.armR.x - P.armL.x) < 2.0 * px1;          // the two wires would merge: draw just one
-            if (onWire(p, P.armL, Q.armL, sag) || (!single && onWire(p, P.armR, Q.armR, sag))) col = wireCol;
+            if (onWire(p, P.armL, Q.armL, sag) || (!single && onWire(p, P.armR, Q.armR, sag))) useRamp = false, col = wireCol;
             snowOnWire(col, p, P.armL, Q.armL, sag, float(k), 0.0, k < 3);
             snowOnWire(col, p, P.armR, Q.armR, sag, float(k), 1.0, k < 3);
         }
@@ -844,7 +896,7 @@ void main() {
     {   // and back toward the viewer, off the right edge
         Pole P = pole(0);
         float sw1 = wireSwing(-1.0, A * 0.8), sw2 = wireSwing(-2.0, A * 0.8);   // the nearest spans swing the most visibly
-        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05 * sw1) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06 * sw2)) col = wireBase;
+        if (onWire(p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05 * sw1) || onWire(p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06 * sw2)) useRamp = false, col = wireBase;
         snowOnWire(col, p, P.armR, vec2(A + 0.05, P.armY - 0.035), 0.05 * sw1, 40.0, 1.0, true);
         snowOnWire(col, p, P.armL, vec2(A + 0.05, P.armY - 0.05), 0.06 * sw2, 41.0, 0.0, true);
     }
@@ -863,19 +915,19 @@ void main() {
         float r = max(2.0 * px1, 0.05 * lt);                 // bend radius
         float Lh = max(3.0 * px1, 0.085 * lt), hh = max(1.5 * px1, 0.014 * lt);
         float hx0 = head.x - 0.55 * Lh, hx1 = head.x + 0.45 * Lh;
-        if (p.y >= g && p.y < g + baseH && abs(p.x - postX) < bw * 0.5) col = (p.x < postX - bw * 0.5 + px1) ? metalHi : metal;   // base
-        if (p.y >= g && p.y <= topY - r && abs(p.x - postX) < pw * 0.5) col = metal;                                          // pole
+        if (p.y >= g && p.y < g + baseH && abs(p.x - postX) < bw * 0.5) useRamp = false, col = (p.x < postX - bw * 0.5 + px1) ? metalHi : metal;   // base
+        if (p.y >= g && p.y <= topY - r && abs(p.x - postX) < pw * 0.5) useRamp = false, col = metal;                                          // pole
         vec2 bc = vec2(postX + r, topY - r);                                                                                   // bend
-        if (p.x <= bc.x && p.y >= bc.y && abs(length(p - bc) - r) < pw * 0.5) col = metal;
-        if (p.x >= bc.x && p.x <= hx0 && abs(p.y - topY) < pw * 0.5) col = metal;                                             // arm
+        if (p.x <= bc.x && p.y >= bc.y && abs(length(p - bc) - r) < pw * 0.5) useRamp = false, col = metal;
+        if (p.x >= bc.x && p.x <= hx0 && abs(p.y - topY) < pw * 0.5) useRamp = false, col = metal;                                             // arm
         if (p.x >= hx0 && p.x <= hx1 && p.y >= topY - hh && p.y <= topY + hh * 0.6) {                                         // housing
-            col = metal;
+            useRamp = false, col = metal;
             if (p.y < topY - hh + max(px1, hh * 0.45) && p.x > hx0 + px1 && p.x < hx1 - px1)                                   // lens strip
-                col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.50, 0.51, 0.53)), hazeCol, lfade), li == 0 ? vec3(1.0, 0.86, 0.55) : vec3(0.85, 0.68, 0.42), fl);
+                useRamp = false, col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.50, 0.51, 0.53)), hazeCol, lfade), li == 0 ? vec3(1.0, 0.86, 0.55) : vec3(0.85, 0.68, 0.42), fl);
         }
         vec3 lsnow = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, lfade);
-        if (p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) col = lsnow;          // snow cap on the head
-        if (e > 0.15 && p.x >= bc.x + px1 && p.x <= hx0 && p.y > topY + pw * 0.5 && p.y < topY + pw * 0.5 + px1 * (0.6 + 0.6 * e)) col = lsnow;   // and along the arm
+        if (p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) useRamp = false, col = lsnow;          // snow cap on the head
+        if (e > 0.15 && p.x >= bc.x + px1 && p.x <= hx0 && p.y > topY + pw * 0.5 && p.y < topY + pw * 0.5 + px1 * (0.6 + 0.6 * e)) useRamp = false, col = lsnow;   // and along the arm
     }
 
     bool glint = false; vec3 glintCol = vec3(1.0);    // glitter: exact colours, past the palette (brighter than white snow)
@@ -976,11 +1028,11 @@ void main() {
         vec3 lc = i == 0 ? vec3(1.0, 0.72, 0.38) : vec3(0.86, 0.92, 1.0);
         float dfade = smoothstep(0.16, 0.02, tl) * 0.9;
         vec3 dmetal = mix(DN(vec3(0.07, 0.08, 0.10), vec3(0.26, 0.25, 0.25)), hazeCol, dfade);
-        if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) col = dmetal;
-        if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) col = dmetal;
+        if (p.y >= gy && p.y <= topY && abs(p.x - lx) < 0.5 * px1) useRamp = false, col = dmetal;
+        if (abs(p.y - topY) < 0.5 * px1 && p.x >= min(lx, head.x) && p.x <= max(lx, head.x)) useRamp = false, col = dmetal;
         float dh = length((p - head) / px1);
-        if (dh < 1.6 && on > 0.5) col = mix(col, lc, 0.45 * (1.0 - 0.45 * dfade) * step(bayer4(q), 0.6));    // one crisp dithered ring, no soft glow
-        if (dh < 0.75) col = mix(mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), hazeCol, dfade), lc, on);
+        if (dh < 1.6 && on > 0.5) useRamp = false, col = mix(col, lc, 0.45 * (1.0 - 0.45 * dfade) * step(bayer4(q), 0.6));    // one crisp dithered ring, no soft glow
+        if (dh < 0.75) useRamp = false, col = mix(mix(DN(vec3(0.25, 0.24, 0.22), vec3(0.45, 0.46, 0.48)), hazeCol, dfade), lc, on);
     }
 
     // ---------------- PLOUGH (drawn after the fog: it is close to the camera; seen from behind, driving away up the road; amber beacon on the cab)
@@ -1096,13 +1148,13 @@ void main() {
             vec2 d = (p - bp) / px1;                                    // in art pixels
             vec3 bc = DN(vec3(0.03, 0.035, 0.05), vec3(0.11, 0.11, 0.12));
             if (!flying) {
-                if ((abs(d.x) < 1.0 && d.y > -0.5 && d.y < 1.5) || (abs(d.x - 0.9) < 0.5 && d.y > 1.5 && d.y < 2.5)) col = bc;   // body + head
+                if ((abs(d.x) < 1.0 && d.y > -0.5 && d.y < 1.5) || (abs(d.x - 0.9) < 0.5 && d.y > 1.5 && d.y < 2.5)) useRamp = false, col = bc;   // body + head
             } else {
                 bool up = fract(time * 6.0 + hi) < 0.5;                 // two-frame wing flap
                 bool hit = abs(d.x) < 0.6 && abs(d.y) < 0.6;
                 hit = hit || (abs(abs(d.x) - 1.0) < 0.5 && abs(d.y - (up ? 1.0 : 0.0)) < 0.5);
                 hit = hit || (up && abs(abs(d.x) - 2.0) < 0.5 && abs(d.y - 1.6) < 0.5);
-                if (hit) col = bc;
+                if (hit) useRamp = false, col = bc;
             }
         }
     }
@@ -1165,8 +1217,10 @@ void main() {
         float vis = mix(mix(0.10, 1.0, lit), 0.85, day) * flake;              // almost invisible in the dark, plain by day
         vec3 fc = mix(DN(vec3(0.55, 0.60, 0.68), vec3(0.97, 0.98, 0.99)), vec3(1.0, 0.88, 0.70), lit);
         if (lit > 0.55 && uh(q + vec2(floor(time * 6.0), 0.0), 77.0) > 0.93) { fc = vec3(1.0, 0.95, 0.85); vis = 1.0; }  // sparkle
-        col = mix(col, fc, vis);
+        col = mix(col, fc, vis); useRamp = false;
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol : quantize(col, q, p.y > HZ && zTree < 0.0), 1.0) * qt_Opacity;
+    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol
+                    : useRamp ? quantizeRamp(col, rampAlb, q, p.y > HZ && zTree < 0.0, pool, hazeCol, fogCol)
+                    : quantize(col, q, p.y > HZ && zTree < 0.0), 1.0) * qt_Opacity;
 }
