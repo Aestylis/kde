@@ -74,6 +74,20 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 **1.0:** First release with the original night scene and overnight snow buildup.
 
+### Releasing an update
+
+The product: https://store.kde.org/p/2380896 (manage it at opendesktop.org → your store backend → Products). Name "Silent County Road" (no version in the title), category Plasma 6 Wallpaper Plugins, licence MIT, Original, tags animated / live-weather / pixel-art / procedural / winter, Homepage and Source both https://github.com/Aestylis/kde/tree/main/silent-county-road.
+
+1. Bump `Version` in `metadata.json` (e.g. 2.0 -> 2.1).
+2. Run `./build.sh`: it compiles the shaders and writes `dist/silent-county-road-<version>.tar.gz`.
+3. Test locally: `kpackagetool6 -t Plasma/Wallpaper -u .` then `systemctl --user restart plasma-plasmashell.service`.
+4. Commit and push to GitHub.
+5. On the store: Products → **Files** → drop the new archive, set its version and a one-line description, check the MD5 matches `md5sum dist/silent-county-road-<version>.tar.gz`; archive the old file (leave "Download lock for archived files" off).
+6. Products → **Changelog**: add a line for the new version (and add it under Changelog here).
+7. If the screenshots changed, update the gallery (max 5 pictures: night.gif, 2-plough, 3-noon, 4-dusk, 5-sky-night) and/or the logo (`screenshots/logo.png`).
+
+Anyone who installed through Get New Plugins is then offered the update.
+
 ### Other fields
 
 **Store page:** https://store.kde.org/p/2380896 (also https://www.opendesktop.org/p/2380896/)
