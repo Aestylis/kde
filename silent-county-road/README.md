@@ -34,6 +34,8 @@ Wildlife sprites are CC0, *Animated Wild Animals* by ScratchIO. See `contents/im
 
 In KDE Plasma, open **Desktop and Wallpaper → Get New Plugins…** and search for **Silent County Road**.
 
+Store page: [store.kde.org/p/2380896](https://store.kde.org/p/2380896)
+
 Or install from source:
 
 ```bash

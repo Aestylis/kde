@@ -76,6 +76,8 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Other fields
 
+**Store page:** https://store.kde.org/p/2380896 (also https://www.opendesktop.org/p/2380896/)
+
 **Category:** Plasma 6 Wallpaper Plugins
 **Version:** 2.0
 **Licence:** MIT
