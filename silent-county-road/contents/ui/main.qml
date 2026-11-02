@@ -499,11 +499,22 @@ WallpaperItem {
     onLatitudeChanged: { times = sunTimes(new Date()); ploughStartMin = times.rise + 25; update() }
     onLongitudeChanged: { times = sunTimes(new Date()); ploughStartMin = times.rise + 25; update() }
 
+    // adaptive frame pacing: almost everything in the scene moves slowly in art pixels (snow falls 2.6-6.5 px/s, clouds and
+    // fog far less), so the scene renders at up to 12 fps when calm and at the full setting only while something fast is on
+    // screen (a vehicle or the plough, an animal, birds, a strong gust). Each frame also makes KWin recomposite the whole
+    // monitor, so this roughly halves the wallpaper's GPU cost. The Sky scene (clouds, moon, snow) always runs calm.
+    property bool busy: false
+    readonly property int calmFps: Math.min(fps, 12)
+    function checkBusy() {
+        if (scene !== 0) { busy = false; return }
+        var g = windAmt > 0.3 ? gustJs((Date.now() / 1000) % 86400 - 1.6) : 0
+        busy = fx.veh.x >= 0 || fx.plough >= 0 || fx.animal.x > -50 || fx.birds.x >= 0 || g > 0.45
+    }
     Timer {                                   // animation clock
-        interval: Math.round(1000 / Math.max(5, main.fps))
+        interval: Math.round(1000 / Math.max(5, main.busy ? main.fps : main.calmFps))
         running: true
         repeat: true
-        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds(); main.updateAnimal(); main.updateWindKnock() } }
+        onTriggered: { fx.time = main.clockSeconds(); if (fx.plough >= 0) main.update(); if (main.scene === 0) { main.updateTraffic(); main.updateBirds(); main.updateAnimal(); main.updateWindKnock(); main.checkBusy() } }
     }
     Timer {                                   // the day moves slowly: sun, lamps, snow timeline every 2 s
         interval: 2000
