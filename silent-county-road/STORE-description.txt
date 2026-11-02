@@ -1,0 +1,34 @@
+A quiet pixel-art winter road for KDE Plasma 6 that follows the real sun and moon at your location, with optional live weather. Snow gathers overnight, lights come on at dusk, and a full-sized county snowplow clears the road every morning. The scenery is procedurally generated and rendered on the GPU.
+
+FEATURES
+
+• Real day and night cycle: uses your latitude, longitude and local time to calculate sunrise, sunset, sun position and moon phases. The sky changes naturally through the day, with twilight colors, alpenglow and the Belt of Venus.
+• Optional live weather: connects to Open-Meteo every 15 minutes for real wind speed, direction, gusts, snowfall and cloud cover, from thin high cloud to heavy overcast. Falls back to simulated weather when offline.
+• Wind and snowfall: snow drifts through the scene while trees sway, power lines swing, streetlamps flex and chimney smoke follows the wind. Strong gusts knock snow from branches and wires.
+• Snow accumulation: snow builds up overnight on the road, rooftops, trees, fences and power lines, then melts, blows away or falls off during the day, with ice crystals sparkling in the sun.
+• Mountains and forests: three mountain ranges and layered spruce forests with atmospheric haze, snowy peaks and shadows that move with the sun.
+• Rural countryside: a farmhouse, red barn, log cabin and cottage with smoking chimneys, snowy roofs and windows that light up after dark. Lights go out one by one through the evening, and now and then a TV flickers.
+• Natural lighting: sunlight, moonlight and cloud cover light the whole landscape. Shadows move with the sun, clouds cast shadows across the fields, and the snow glows under a clear moonlit sky.
+• Passing traffic: classic 1980s cars, pickups and vans in both directions with working headlights, taillights and reflections. Their tire tracks slowly fill with fresh snow.
+• Wildlife: deer by day, foxes at night, and flocks of birds on the power lines. Vehicles stop when animals cross the road.
+• Streetlamps: off at sunrise, flickering back on at dusk. The far lamp is getting old and sometimes struggles to stay lit.
+• Morning snowplow: a full-sized county plow truck arrives about 25 minutes after sunrise, with amber beacons, a wide orange blade and snow rolling off to the side. It approaches one morning and drives away the next.
+• Second monitor: an optional Sky scene shows the same sun, moon, clouds and time of day, in sync with the main wallpaper.
+• Procedural pixel art: 3D-generated scenery with material-specific palettes, shading and dithering, rendered by a GPU shader. Typical CPU use is about 1–3% of one core.
+
+SETTINGS
+
+Scene (Road, or Sky for a second monitor), pixel size, frame rate, snowfall, fog, wind, lamp flicker and winter conditions. Set your latitude and longitude for accurate sun and moon positions, turn on live weather, or preview any hour of the day. Buttons let you send the plow, wildlife or a passing car whenever you like.
+
+Live weather is off by default. It needs no account and shares only your configured coordinates with Open-Meteo.
+
+INSTALL
+
+Desktop and Wallpaper → Get New Plugins… → search for "Silent County Road", then pick it under Wallpaper type.
+Or manually: kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.0.tar.gz
+
+Requires Plasma 6. The shaders need desktop OpenGL or Vulkan.
+
+Source and issues: https://github.com/Aestylis/kde/tree/main/silent-county-road
+Licence: MIT
+Wildlife sprites: CC0, "Animated Wild Animals" by ScratchIO.
