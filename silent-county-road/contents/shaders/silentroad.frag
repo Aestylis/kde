@@ -63,7 +63,6 @@ layout(std140, binding = 0) uniform buf {
 };
 layout(binding = 1) uniform sampler2D atlas;     // wildlife sprite atlas (see contents/images/CREDITS.md)
 layout(binding = 3) uniform sampler2D houseAtlas; // farmhouse, cabin, barn, cottage: normal, material*32+ao / window id (tools/gen_houses.py)
-layout(binding = 4) uniform sampler2D carAtlas;   // sedan / pickup / van, rear + front, 3/4 view (tools/gen_cars.py)
 layout(binding = 2) uniform sampler2D treeAtlas; // grown spruces: normal.xy, material*64+ao, coverage (tools/gen_trees.py)
 
 // ------------------------------------------------------------------ utilities
@@ -342,25 +341,6 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
     return true;
 }
 
-// one vehicle from the car atlas: square box bw across (uv), wheels on the bottom row at yb, centred on xc.
-// idx = type * 2 + (oncoming ? 1 : 0). tx = the texel (normal, material, ao); ip = its pixel in the 88-px frame.
-bool carSprite(vec2 p, float yb, float xc, float bw, int idx, bool flip, out vec4 tx, out vec2 ip) {
-    tx = vec4(0.0); ip = vec2(0.0);
-    if (p.y < yb || p.y > yb + bw || abs(p.x - xc) > 0.5 * bw) return false;
-    float bpx = bw / px1;
-    int b = bpx <= 11.0 ? 3 : bpx <= 22.0 ? 2 : bpx <= 44.0 ? 1 : 0;
-    int bh = b == 0 ? 88 : b == 1 ? 44 : b == 2 ? 22 : 11;
-    int y0 = b == 0 ? 0 : b == 1 ? 88 : b == 2 ? 132 : 154;
-    float sc = float(bh) / bpx;
-    int ix = int(floor((p.x - xc) / px1 * sc + float(bh) * 0.5)), iy = int(floor((p.y - yb) / px1 * sc));
-    if (ix < 0 || iy < 0 || ix >= bh || iy >= bh) return false;
-    if (flip) ix = bh - 1 - ix;
-    tx = texelFetch(carAtlas, ivec2(idx * bh + ix, y0 + bh - 1 - iy), 0);
-    if (flip) tx.r = 1.0 - tx.r;
-    ip = vec2(ix, iy) * (88.0 / float(bh));
-    return tx.a > 0.5;
-}
-
 // one building from the house atlas (box 1.6 x hb wide, ground origin 0.10 hb above the box bottom, at its centre)
 bool houseSprite(vec2 p, float gy, float cx, float hb, int v, bool flip, out vec4 tx) {
     tx = vec4(0.0);
@@ -518,6 +498,167 @@ bool inShadow(vec2 g, vec2 c, vec2 dir, float L, float r, int kind, float pxm) {
     float s = along / L;
     float w = kind == 0 ? (s < 0.08 ? 0.25 : r * (1.0 - s) * (0.85 + 0.3 * hash11(floor(along * 1.7) + c.x))) : r;
     return perp < max(w, 0.5 * pxm);
+}
+
+// ---- vehicles, ray-traced through the scene's own camera: eye 5.2 m up (HZ * WSC), focal length 1 (uv), looking down
+//      the road (principal point at VP.x); a ground point at depth t sits WSC / t metres ahead. Each vehicle is a handful of
+//      convex solids (sedan, pickup, van), so perspective, the visible flank and the light are right at every distance.
+//      Local frame: x to the vehicle's right, y up, z from the rear (0) toward the front.
+const int C_PAINT = 0, C_GLASS = 1, C_CHROME = 2, C_RUBBER = 3, C_LAMP = 4, C_PLATE = 5, C_GRILLE = 6, C_SNOW = 7;
+vec4 plT(vec3 n, vec3 pt) { n = normalize(n); return vec4(n, dot(n, pt)); }
+void boxPl(vec3 mn, vec3 mx, out vec4 pl[7], out int cnt) {
+    pl[0] = vec4(-1, 0, 0, -mn.x); pl[1] = vec4(1, 0, 0, mx.x); pl[2] = vec4(0, -1, 0, -mn.y);
+    pl[3] = vec4(0, 1, 0, mx.y); pl[4] = vec4(0, 0, -1, -mn.z); pl[5] = vec4(0, 0, 1, mx.z); pl[6] = vec4(0); cnt = 6;
+}
+// greenhouse: bottom at yb spanning z zb0..zb1 at half-width xb, roof at yt spanning zt0..zt1 at half-width xt
+void cabinPl(float xb, float xt, float yb, float yt, float zb0, float zt0, float zt1, float zb1, out vec4 pl[7], out int cnt) {
+    pl[0] = vec4(0, -1, 0, -yb); pl[1] = vec4(0, 1, 0, yt);
+    pl[2] = plT(vec3(-(yt - yb), xb - xt, 0), vec3(-xb, yb, 0)); pl[3] = plT(vec3(yt - yb, xb - xt, 0), vec3(xb, yb, 0));
+    pl[4] = plT(vec3(0, zt0 - zb0, -(yt - yb)), vec3(0, yb, zb0)); pl[5] = plT(vec3(0, zb1 - zt1, yt - yb), vec3(0, yb, zb1));
+    pl[6] = vec4(0); cnt = 6;
+}
+bool cvx(vec3 ro, vec3 rd, vec4 pl[7], int cnt, out float tIn, out vec3 nIn) {
+    tIn = -1e9; float tOut = 1e9; nIn = vec3(0.0);
+    for (int i = 0; i < 7; i++) {
+        if (i >= cnt) break;
+        float den = dot(pl[i].xyz, rd), num = pl[i].w - dot(pl[i].xyz, ro);
+        if (abs(den) < 1e-7) { if (num < 0.0) return false; continue; }
+        float t = num / den;
+        if (den < 0.0) { if (t > tIn) { tIn = t; nIn = pl[i].xyz; } } else tOut = min(tOut, t);
+    }
+    return tIn <= tOut && tIn > 0.0;
+}
+// part k of vehicle type ty (false past the last part); pid names the part for its material rules
+bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
+    pid = k; cnt = 0;
+    for (int i = 0; i < 7; i++) pl[i] = vec4(0.0);
+    if (ty == 0) {                                        // sedan: W 0.875, L 4.6
+        if (k == 0) boxPl(vec3(-0.875, 0.28, 0.05), vec3(0.875, 0.92, 4.55), pl, cnt);
+        else if (k == 1) cabinPl(0.82, 0.68, 0.92, 1.38, 1.30, 1.80, 2.80, 3.25, pl, cnt);
+        else if (k == 2) boxPl(vec3(-0.58, 1.38, 1.95), vec3(0.58, 1.43, 2.65), pl, cnt);
+        else if (k == 3) boxPl(vec3(-0.92, 0.30, -0.10), vec3(0.92, 0.47, 0.02), pl, cnt);
+        else if (k == 4) boxPl(vec3(-0.92, 0.30, 4.58), vec3(0.92, 0.47, 4.70), pl, cnt);
+        else if (k == 5) boxPl(vec3(-0.98, 1.00, 3.05), vec3(-0.86, 1.10, 3.17), pl, cnt);
+        else if (k == 6) boxPl(vec3(0.86, 1.00, 3.05), vec3(0.98, 1.10, 3.17), pl, cnt);
+        else if (k <= 10) { float sx = (k == 7 || k == 8) ? -1.0 : 1.0, z0 = (k == 7 || k == 9) ? 0.75 : 3.25;
+            boxPl(vec3(min(sx * 0.60, sx * 0.86), 0.0, z0), vec3(max(sx * 0.60, sx * 0.86), 0.62, z0 + 0.6), pl, cnt); }
+        else return false;
+    } else if (ty == 1) {                                 // pickup: W 0.90, L 5.3
+        if (k == 0) boxPl(vec3(-0.90, 0.40, 0.05), vec3(0.90, 1.05, 2.20), pl, cnt);
+        else if (k == 1) boxPl(vec3(-0.78, 0.90, 0.15), vec3(0.78, 1.00, 2.10), pl, cnt);
+        else if (k == 2) boxPl(vec3(-0.90, 0.40, 2.25), vec3(0.90, 1.75, 3.85), pl, cnt);
+        else if (k == 3) boxPl(vec3(-0.90, 0.40, 3.85), vec3(0.90, 1.10, 5.25), pl, cnt);
+        else if (k == 4) boxPl(vec3(-0.62, 1.75, 2.60), vec3(0.62, 1.80, 3.50), pl, cnt);
+        else if (k == 5) boxPl(vec3(-0.95, 0.32, -0.08), vec3(0.95, 0.52, 0.04), pl, cnt);
+        else if (k == 6) boxPl(vec3(-0.95, 0.32, 5.22), vec3(0.95, 0.52, 5.34), pl, cnt);
+        else if (k == 7) boxPl(vec3(-1.03, 1.30, 3.75), vec3(-0.90, 1.45, 3.85), pl, cnt);
+        else if (k == 8) boxPl(vec3(0.90, 1.30, 3.75), vec3(1.03, 1.45, 3.85), pl, cnt);
+        else if (k <= 12) { float sx = (k == 9 || k == 10) ? -1.0 : 1.0, z0 = (k == 9 || k == 11) ? 0.65 : 4.05;
+            boxPl(vec3(min(sx * 0.58, sx * 0.90), 0.0, z0), vec3(max(sx * 0.58, sx * 0.90), 0.74, z0 + 0.72), pl, cnt); }
+        else return false;
+    } else {                                              // van: W 0.92, L 4.9
+        if (k == 0) boxPl(vec3(-0.92, 0.32, 0.05), vec3(0.92, 1.95, 4.10), pl, cnt);
+        else if (k == 1) {                                // short sloped nose with the windshield
+            pl[0] = vec4(0, -1, 0, -0.32); pl[1] = vec4(-1, 0, 0, 0.92); pl[2] = vec4(1, 0, 0, 0.92);
+            pl[3] = vec4(0, 0, -1, -4.10); pl[4] = vec4(0, 0, 1, 4.85); pl[5] = plT(vec3(0, 0.75, 0.75), vec3(0, 1.95, 4.10));
+            pl[6] = vec4(0, 1, 0, 1.95); cnt = 7;
+        }
+        else if (k == 2) boxPl(vec3(-0.80, 1.95, 0.30), vec3(0.80, 2.01, 3.80), pl, cnt);
+        else if (k == 3) boxPl(vec3(-0.95, 0.28, -0.08), vec3(0.95, 0.46, 0.04), pl, cnt);
+        else if (k == 4) boxPl(vec3(-0.95, 0.28, 4.82), vec3(0.95, 0.46, 4.94), pl, cnt);
+        else if (k <= 8) { float sx = (k == 5 || k == 6) ? -1.0 : 1.0, z0 = (k == 5 || k == 7) ? 0.55 : 3.55;
+            boxPl(vec3(min(sx * 0.62, sx * 0.90), 0.0, z0), vec3(max(sx * 0.62, sx * 0.90), 0.64, z0 + 0.62), pl, cnt); }
+        else return false;
+    }
+    return true;
+}
+float carLen(int ty) { return ty == 0 ? 4.6 : ty == 1 ? 5.3 : 4.9; }
+// nearest hit along the ray (local frame); returns the part id or -1
+int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
+    bt = 1e9; bn = vec3(0.0); bp = vec3(0.0); int best = -1;
+    for (int k = 0; k < 14; k++) {
+        vec4 pl[7]; int cnt, pid;
+        if (!carPart(ty, k, pl, cnt, pid)) break;
+        float t; vec3 n;
+        if (cvx(ro, rd, pl, cnt, t, n) && t < bt) { bt = t; bn = n; best = pid; }
+    }
+    if (best >= 0) bp = ro + rd * bt;
+    return best;
+}
+int carMaterial(int ty, int pid, vec3 P, vec3 n) {
+    float ax = abs(P.x), y = P.y;
+    bool rear = n.z < -0.5, front = n.z > 0.5, side = abs(n.x) > 0.5;
+    if (ty == 0) {
+        if (pid == 0) {
+            if (rear && y > 0.60 && y < 0.80 && ax > 0.30) return C_LAMP;
+            if (rear && y > 0.62 && y < 0.78) return ax <= 0.24 ? C_PLATE : C_RUBBER;
+            if (front && y > 0.60 && y < 0.78 && ax > 0.47 && ax < 0.80) return C_LAMP;
+            if (front && y > 0.56 && y < 0.80 && ax <= 0.44) return C_GRILLE;
+            if (front && y > 0.80 && y < 0.84 && ax < 0.80) return C_CHROME;
+            if (side && y > 0.50 && y < 0.54) return C_CHROME;
+            return C_PAINT;
+        }
+        if (pid == 1) {
+            if (n.y > 0.9) return C_PAINT;
+            bool endf = abs(n.z) > 0.5;
+            if (endf && ax > 0.58) return C_PAINT;
+            if (!endf && abs(P.z - 2.28) < 0.07) return C_PAINT;
+            return C_GLASS;
+        }
+        if (pid == 2) return C_SNOW;
+        if (pid == 3 || pid == 4) return C_CHROME;
+        if (pid == 5 || pid == 6) return C_PAINT;
+        return C_RUBBER;
+    }
+    if (ty == 1) {
+        if (pid == 0) {
+            if (rear && ax > 0.76 && y > 0.62 && y < 1.00) return C_LAMP;
+            if (rear && y > 0.95 && y < 0.99 && ax < 0.70) return C_CHROME;
+            if (rear && y > 0.50 && y < 0.62 && ax < 0.22) return C_PLATE;
+            if (n.y > 0.9) return C_RUBBER;
+            return C_PAINT;
+        }
+        if (pid == 1) return C_RUBBER;
+        if (pid == 2) return (abs(n.z) > 0.5 && ax < 0.62 && y > 1.22 && y < 1.62) || (side && y > 1.22 && y < 1.62) ? C_GLASS : C_PAINT;
+        if (pid == 3) {
+            if (front && y > 0.62 && y < 0.98 && ax <= 0.52) return C_GRILLE;
+            if (front && y > 0.68 && y < 0.90 && ax > 0.56 && ax < 0.84) return C_LAMP;
+            return C_PAINT;
+        }
+        if (pid == 4) return C_SNOW;
+        if (pid <= 8) return C_CHROME;
+        return C_RUBBER;
+    }
+    if (pid == 0) {
+        if (rear && y > 1.22 && y < 1.70 && ax > 0.10 && ax < 0.74) return C_GLASS;
+        if (rear && ax < 0.025) return C_RUBBER;
+        if (rear && ax > 0.78 && y > 0.58 && y < 1.08) return C_LAMP;
+        if (rear && y > 0.50 && y < 0.62 && ax > 0.06 && ax < 0.26) return C_PLATE;
+        if (side && y > 1.25 && y < 1.68 && P.z > 3.2) return C_GLASS;
+        return C_PAINT;
+    }
+    if (pid == 1) {
+        if (n.z > 0.3 && n.y > 0.2 && ax < 0.80 && y > 1.18) return C_GLASS;
+        if (n.z > 0.9 && y > 0.58 && y < 0.80 && ax <= 0.48) return C_GRILLE;
+        if (n.z > 0.9 && y > 0.60 && y < 0.78 && ax > 0.52 && ax < 0.84) return C_LAMP;
+        return C_PAINT;
+    }
+    if (pid == 2) return C_SNOW;
+    if (pid <= 4) return C_CHROME;
+    return C_RUBBER;
+}
+// the ray for pixel p, in the vehicle's local frame (origin at its rear-centre on the ground)
+void carRay(vec2 p, vec3 org, bool away, out vec3 ro, out vec3 rd) {
+    vec3 eye = vec3(0.0, HZ * WSC, 0.0);
+    vec3 d = normalize(vec3(p.x - VP.x, p.y - HZ, 1.0));
+    vec3 o = eye - org;
+    ro = away ? o : vec3(-o.x, o.y, -o.z);                // oncoming: the vehicle faces us, its +x is our -x
+    rd = away ? d : vec3(-d.x, d.y, -d.z);
+}
+bool carHitAt(int ty, vec2 p, vec3 org, bool away) {
+    vec3 ro, rd; carRay(p, org, away, ro, rd);
+    float t; vec3 n, P;
+    return carTrace(ty, ro, rd, t, n, P) >= 0;
 }
 
 void main() {
@@ -1137,37 +1278,52 @@ void main() {
         float wv = max(hwv * 0.72, px1 * 2.0);                               // a car fills ~70% of its lane (lane = half the road)
         float hv = wv * (vtype == 2 ? 1.05 : vtype == 1 ? 0.95 : 0.80);
         bool lit = lamps > 0.5;
-        vec4 ctx; vec2 cip;
-        // the vehicle lies along its lane, which runs toward the vanishing point: if that is up-left of it, its far end
-        // (the nose going away, the tail when oncoming) points left, so mirror the baked view (whose far end points right)
-        if (carSprite(p, yb, xc, wv * 4.3 / 1.75, vtype * 2 + (away ? 0 : 1), VP.x < xc, ctx, cip)) {
-            float cb = floor(ctx.b * 255.0 + 0.5);
-            int cm = int(cb / 32.0); float cao = mod(cb, 32.0) / 31.0;
-            float cnx = ctx.r * 2.0 - 1.0, cny = ctx.g * 2.0 - 1.0, cnz = sqrt(max(0.0, 1.0 - cnx * cnx - cny * cny));
-            float latC = clamp((lightX - xc) * 2.0, -1.0, 1.0);
-            float dif = clamp(dot(vec2(cnx, cny), normalize(vec2(latC * (0.35 + 0.85 * lightLow), 1.0 - 0.45 * lightLow))) * 0.85 + cnz * 0.35, 0.0, 1.0);
-            vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(1.0, 0.98, 0.95)) * (DN(vec3(0.45), vec3(0.62)) + 0.62 * dif) * mix(0.70, 1.0, cao)
-                       + vec3(1.0, 0.80, 0.55) * 0.5 * clamp(L, 0.0, 1.0);                     // street lamps light it too
-            light = mix(light, light * glow * 1.4, twi * 0.5);
-            vec3 c;
-            exact = true;
-            if (cm == 0 || (cm == 7 && e < 0.3)) {                                          // paint (roof snow only after a snowy night)
-                c = body * light;
-                if (dif > 0.86 && day > 0.25) c = mix(c, vec3(1.0, 0.99, 0.96), 0.55 * day);  // specular glint on the curves
-                c = quantizeRamp(c, body, q, false, L, hazeCol, fogCol);
-            } else if (cm == 1) {                                                           // glass: the sky, a diagonal reflection streak
-                c = DN(vec3(0.06, 0.07, 0.10), vec3(0.50, 0.58, 0.70)) * (0.70 + 0.45 * cny);
-                if (fract((cip.x + cip.y) * 0.075) < 0.16) c = mix(c, DN(vec3(0.25, 0.28, 0.36), vec3(0.88, 0.92, 0.96)), 0.7);
-            } else if (cm == 2) c = DN(vec3(0.22, 0.24, 0.30), vec3(0.80, 0.82, 0.86)) * (0.70 + 0.45 * cny + 0.2 * dif);   // chrome
-            else if (cm == 3) c = vec3(0.05, 0.05, 0.06) + light * 0.02;                   // rubber, trim, outline
-            else if (cm == 4) {                                                             // lamps: tail (going away) or head (oncoming)
-                if (away) { if (lit) tail = true; c = vec3(0.36, 0.08, 0.07) * light; }
-                else c = lit ? vec3(1.0, 0.97, 0.86) : vec3(0.72, 0.74, 0.76) * light;
+        // the vehicle in the world: lane centre and depth -> metres; origin at its rear-centre (away) or front... rear-centre
+        // of an oncoming one is further away, so its local frame starts at the far end and runs toward us
+        float Zc = WSC / tv, Xc = (xc - VP.x) * WSC / tv, Lc = carLen(vtype);
+        vec3 org = vec3(Xc, 0.0, away ? Zc - 0.5 * Lc : Zc + 0.5 * Lc);
+        if (abs(p.x - xc) < wv * 1.7 && p.y > yb - wv * 0.15 && p.y < yb + wv * 1.6) {
+            vec3 ro, rd; carRay(p, org, away, ro, rd);
+            float ct; vec3 cn, cP;
+            int pid = carTrace(vtype, ro, rd, ct, cn, cP);
+            if (pid >= 0) {
+                int cm = carMaterial(vtype, pid, cP, cn);
+                // 1-px dark outline round the silhouette when the vehicle is big enough to carry one
+                if (wv > 14.0 * px1 && (!carHitAt(vtype, p + vec2(px1, 0.0), org, away) || !carHitAt(vtype, p - vec2(px1, 0.0), org, away)
+                                     || !carHitAt(vtype, p + vec2(0.0, px1), org, away))) cm = C_RUBBER;
+                vec3 nw = away ? cn : vec3(-cn.x, cn.y, -cn.z);                         // normal back in the world frame
+                vec3 rdw = away ? rd : vec3(-rd.x, rd.y, -rd.z);
+                // key light: the sun (ahead of us, on the screen's azimuth mapping) or the moon (anywhere)
+                bool bySunC = day > 0.25 || twi > 0.3;
+                vec2 sh2 = normalize(vec2(sunX * A - VP.x, 1.0));
+                vec3 Lk = bySunC ? normalize(vec3(sh2.x * cos(radians(max(sunElev, 2.0))), sin(radians(max(sunElev, 2.0))), sh2.y * cos(radians(max(sunElev, 2.0)))))
+                                 : normalize(vec3(sin(radians(moon.x)) * cos(radians(max(moon.y, 2.0))), sin(radians(max(moon.y, 2.0))), cos(radians(moon.x)) * cos(radians(max(moon.y, 2.0)))));
+                float kd = max(dot(nw, Lk), 0.0) * (bySunC ? 1.0 : 0.5 * moon.z * smoothstep(2.0, 10.0, moon.y));
+                vec3 light = DN(vec3(0.20, 0.23, 0.33), vec3(0.98, 0.97, 0.95)) * (DN(vec3(0.42), vec3(0.50)) + 0.22 * nw.y + 0.70 * kd)
+                           + vec3(1.0, 0.80, 0.55) * 0.5 * clamp(L, 0.0, 1.0);
+                light = mix(light, light * glow * 1.4, twi * 0.5);
+                vec3 rf = reflect(rdw, nw);                                                      // for glass, chrome, glints
+                vec3 skyR = mix(DN(vec3(0.05, 0.06, 0.09), vec3(0.42, 0.48, 0.56)), DN(vec3(0.12, 0.15, 0.24), vec3(0.62, 0.74, 0.90)), clamp(rf.y * 2.0, 0.0, 1.0));
+                vec3 c;
+                exact = true;
+                if (cm == C_PAINT || (cm == C_SNOW && e < 0.3)) {
+                    c = body * light;
+                    if (bySunC && dot(rf, Lk) > 0.96) c = mix(c, vec3(1.0, 0.99, 0.96), 0.55 * day);   // glint at the true reflection angle
+                    c = quantizeRamp(c, body, q, false, L, hazeCol, fogCol);
+                } else if (cm == C_GLASS) {
+                    c = skyR * 0.85;
+                    if (fract((cP.x * 0.7 + cP.y + cP.z * 0.3) * 2.2) < 0.18) c = mix(c, skyR * 1.6 + 0.08, 0.6);   // reflection streak
+                } else if (cm == C_CHROME) c = skyR * 1.25 + vec3(0.10) * kd;
+                else if (cm == C_RUBBER) c = vec3(0.05, 0.05, 0.06) + light * 0.02;
+                else if (cm == C_LAMP) {
+                    if (away) { if (lit) tail = true; c = vec3(0.36, 0.08, 0.07) * light; }
+                    else c = lit ? vec3(1.0, 0.97, 0.86) : vec3(0.72, 0.74, 0.76) * light;
+                }
+                else if (cm == C_PLATE) c = vec3(0.86, 0.86, 0.78) * light;
+                else if (cm == C_GRILLE) c = vec3(0.09, 0.09, 0.10) * (0.8 + 0.3 * kd);
+                else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * (0.82 + 0.18 * nw.y);   // roof snow
+                exactCol = clamp(c, 0.0, 1.0);
             }
-            else if (cm == 5) c = vec3(0.86, 0.86, 0.78) * light;                           // plate
-            else if (cm == 6) c = vec3(0.09, 0.09, 0.10) * (0.8 + 0.4 * dif);              // grille
-            else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * mix(0.82, 1.0, dif);   // roof snow
-            exactCol = c;
         }
         if (exact && !tail) exactCol = mix(exactCol, fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tv) * 0.9);
         if (lit && p.y < HZ) {

@@ -434,19 +434,12 @@ WallpaperItem {
         smooth: false
     }
 
-    Image {                                   // sedan, pickup, van (3/4 rear + front views), relit in the shader (tools/gen_cars.py)
-        id: carAtlasImg
-        source: Qt.resolvedUrl("../images/cars.png")
-        visible: false
-        smooth: false
-    }
 
     ShaderEffect {
         id: fx
         property var atlas: wildlifeAtlas
         property var treeAtlas: treeAtlasImg
         property var houseAtlas: houseAtlasImg
-        property var carAtlas: carAtlasImg
         anchors.fill: parent
         property real time: main.clockSeconds()
         // block size in PHYSICAL pixels, so a scaled monitor gets the same-size pixels as an unscaled one
