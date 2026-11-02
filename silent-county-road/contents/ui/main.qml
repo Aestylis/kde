@@ -32,6 +32,7 @@ WallpaperItem {
     property real liveWindF: 1
     property real liveSnowF: 1
     property real liveCloud: -1
+    property real liveThick: 1
     property real windDirEff: 1
     property var wx: null
     property real wxAt: 0
@@ -46,7 +47,7 @@ WallpaperItem {
             applyWeather()
         }
         xhr.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + latitude.toFixed(3) + "&longitude=" + longitude.toFixed(3)
-                 + "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,snowfall,cloud_cover&wind_speed_unit=ms")
+                 + "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,snowfall,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high&wind_speed_unit=ms")
         xhr.send()
     }
     function applyWeather() {
@@ -59,6 +60,9 @@ WallpaperItem {
         windDirEff = lateral >= 0 ? 1 : -1
         liveSnowF = wx.snowfall > 0 ? Math.min(2, 0.6 + 2.0 * wx.snowfall) : 0.12   // not snowing: a few stray flakes
         liveCloud = Math.max(0, Math.min(1, wx.cloud_cover / 100))
+        // how thick: low cloud is dense, mid fairly, high cirrus a thin veil (the moon and stars show through)
+        var lo = wx.cloud_cover_low || 0, mi = wx.cloud_cover_mid || 0, hi = wx.cloud_cover_high || 0
+        liveThick = (lo + mi + hi) > 0 ? Math.max(0.3, (lo * 1.0 + mi * 0.8 + hi * 0.38) / (lo + mi + hi)) : 1   // cover-weighted thickness
     }
     onLiveWeatherChanged: { if (liveWeather) fetchWeather(); else applyWeather() }
     Timer { interval: 15 * 60 * 1000; running: main.liveWeather; repeat: true; triggeredOnStart: true; onTriggered: main.fetchWeather() }
@@ -453,6 +457,7 @@ WallpaperItem {
         property real windAmt: main.windAmt
         property real windDir: main.windDirEff
         property real liveCloud: main.liveCloud
+        property real liveThick: main.liveThick
         property real erosion: 0
         property real flickerAmt: main.flickerAmt          // 0..2: up to 1 = depth, beyond = more often
         property real day: 0

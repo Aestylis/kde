@@ -54,6 +54,7 @@ layout(std140, binding = 0) uniform buf {
     float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
     float windDir;   // +1 the wind blows left->right on screen, -1 right->left (live weather)
     float liveCloud; // live cloud cover 0..1, or -1 (procedural)
+    float liveThick; // live cloud thickness 0.3 (high cirrus veil) .. 1 (low, dense)
     vec4 moon;       // x = azimuth from the view centre (deg, + west / screen-right), y = elevation (deg), z = how lit 0..1
     vec4 belt;       // x = anti-sun point across the screen (0..1 of width, may lie off-screen), y = degrees per screen width
     vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
@@ -102,6 +103,17 @@ float ridgeH(float x, uint salt) {                      // ridged multifractal: 
 float rockR(vec2 q) {                                   // ridged rock texture: buttresses (1) and gullies (0)
     float n1 = 1.0 - abs(2.0 * vnoise(q) - 1.0), n2 = 1.0 - abs(2.0 * vnoise(q * 2.2 + 4.0) - 1.0);
     return 0.65 * n1 * n1 + 0.35 * n2;
+}
+// live cloud cover (0..1 of the sky) -> cloud threshold: measured from the rendered sky (threshold 0.30 covers 97%,
+// 0.40 83%, 0.50 52%, 0.60 16%, 0.70 2%), inverted piecewise so the screen shows the forecast's coverage
+float coverToG(float c) {
+    c = clamp(c, 0.0, 1.0);
+    if (c > 0.97) return mix(0.30, 0.25, (c - 0.97) / 0.03);
+    if (c > 0.83) return mix(0.40, 0.30, (c - 0.83) / 0.14);
+    if (c > 0.525) return mix(0.50, 0.40, (c - 0.525) / 0.305);
+    if (c > 0.164) return mix(0.60, 0.50, (c - 0.164) / 0.361);
+    if (c > 0.019) return mix(0.70, 0.60, (c - 0.019) / 0.145);
+    return mix(0.78, 0.70, c / 0.019);
 }
 float gustAt(float t) {
     float v = (windX(t + 0.5) - windX(t - 0.5)) / max(windAmt, 1e-3);   // px/s at wind 1: ~1.1 lull .. 2.4 mean .. 3.6 gust
@@ -561,7 +573,7 @@ void main() {
     col = mix(col, glow, twi * 0.75 * exp(-sk * 3.0));                             // horizon glow at dawn/dusk
     // clouds: same recipe + lighting as the sky screen, thinning toward the horizon so the two monitors read as one sky
     if (p.y > HZ) {
-        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y)) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);
+        gCover = (liveCloud >= 0.0 ? coverToG(liveCloud) : mix(0.46, 0.36, e)) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y));
         float dens = cloudField(p);
         float cl = smoothstep(0.0, 0.25, dens);
         if (cl > 0.0) {
@@ -576,7 +588,7 @@ void main() {
             for (int i = 1; i <= 4; i++) above += cloudField(p + vec2(0.0, 0.03 * float(i)));
             cc *= mix(1.0, 0.68, smoothstep(0.4, 3.2, above));
             cc += lightCol * (1.0 - cl) * exp(-length(p - lightPos) * 3.0) * 0.55;
-            col = mix(col, cc, cl * 0.9);
+            col = mix(col, cc, cl * 0.9 * (liveCloud >= 0.0 ? liveThick : 1.0));   // thin high cloud: a veil
         }
     }
     // Earth's shadow and the Belt of Venus: at twilight, opposite the sun, a dark blue band rises from the horizon as the sun
@@ -974,8 +986,8 @@ void main() {
             vec2 w = vec2((p.x - VP.x) / tg, 1.0 / tg);                // world position on the ground (lateral, distance)
             vec2 cp = vec2(w.x * 0.07 + time * 0.010, w.y * 0.22);     // drifts the same way as the sky clouds
             float n = fbm(cp) * 0.75 + fbm(cp * 2.1 + 5.0) * 0.35;
-            float cov = mix(0.50, 0.40, e) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);
-            float overcast = (1.0 - 0.6 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud) : 1.0);                                    // thick overcast: no distinct shadows
+            float cov = liveCloud >= 0.0 ? coverToG(liveCloud) + 0.04 : mix(0.50, 0.40, e);
+            float overcast = (1.0 - 0.6 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud * liveThick) : 1.0);                                    // thick overcast: no distinct shadows
             float sh = smoothstep(cov, cov + 0.10, n) * sunUp * overcast;
             // cast shadows: trees, houses, poles and lamp posts throw shadows away from the sun, long when it is low
             if (!isTree && p.y < HZ) {
@@ -1017,12 +1029,12 @@ void main() {
                 if (!inSh) inSh = inShadow(g, groundW(post1, lt1), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm)
                                || inShadow(g, groundW(post2, lt2), dir, min(8.4 / tanE, 140.0), 0.10, 2, pxm);
                 if (inSh) {                                                           // snow in sun-shadow is a clear sky-blue
-                    float cs = bySun ? 0.9 * day * smoothstep(1.0, 6.0, sunElev) * (1.0 - 0.45 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud) : 1.0)
-                                     : 0.95 * moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud) : 1.0);   // gone under cloud
+                    float cs = bySun ? 0.9 * day * smoothstep(1.0, 6.0, sunElev) * (1.0 - 0.45 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.65, 1.0, liveCloud * liveThick) : 1.0)
+                                     : 0.95 * moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud * liveThick) : 1.0);   // gone under cloud
                     col = mix(col, col * (bySun ? vec3(0.56, 0.65, 0.90) : vec3(0.42, 0.50, 0.80)), cs);
                     sh *= 0.4;                                                        // don't stack the cloud shade on top
                 } else if (!bySun) {                                                  // moonlit snow glows; the shadows stay dark
-                    float mk = moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud) : 1.0);
+                    float mk = moonK * (liveCloud >= 0.0 ? 1.0 - 0.95 * smoothstep(0.55, 0.95, liveCloud * liveThick) : 1.0);
                     col = col * (1.0 + 0.85 * mk) * mix(vec3(1.0), vec3(0.92, 0.98, 1.10), mk);
                 }
                 // glitter: ice crystals catching the sun. Sparse candidates on sunlit open snow, each flashing briefly

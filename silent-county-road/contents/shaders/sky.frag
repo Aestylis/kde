@@ -29,6 +29,7 @@ layout(std140, binding = 0) uniform buf {
     float sunElev;    // degrees
     float windDir;    // +1 / -1 (live weather)
     float liveCloud;  // live cloud cover 0..1, or -1 (procedural)
+    float liveThick;  // 0.3 thin high veil .. 1 dense low cloud
     vec2 res;
 };
 
@@ -90,6 +91,17 @@ vec3 quantize(vec3 c, vec2 q) {
 
 vec3 DN(vec3 n, vec3 d) { return mix(n, d, day); }
 
+// live cloud cover (0..1 of the sky) -> cloud threshold: measured from the rendered sky (threshold 0.30 covers 97%,
+// 0.40 83%, 0.50 52%, 0.60 16%, 0.70 2%), inverted piecewise so the screen shows the forecast's coverage
+float coverToG(float c) {
+    c = clamp(c, 0.0, 1.0);
+    if (c > 0.97) return mix(0.30, 0.25, (c - 0.97) / 0.03);
+    if (c > 0.83) return mix(0.40, 0.30, (c - 0.83) / 0.14);
+    if (c > 0.525) return mix(0.50, 0.40, (c - 0.525) / 0.305);
+    if (c > 0.164) return mix(0.60, 0.50, (c - 0.164) / 0.361);
+    if (c > 0.019) return mix(0.70, 0.60, (c - 0.019) / 0.145);
+    return mix(0.78, 0.70, c / 0.019);
+}
 float gWind, gCover;                     // set in main, used by the cloud field
 // cloud density (0 = clear sky .. ~1 = thick core): warped fbm, drifting with the wind
 float cloudField(vec2 p) {
@@ -136,7 +148,7 @@ void main() {
 
     // ---------------- CLOUDS
     gWind = wind;
-    gCover = mix(0.46, 0.36, e) + (liveCloud >= 0.0 ? 0.30 - 0.52 * liveCloud : 0.0);                         // lower threshold = more cloud through the night
+    gCover = liveCloud >= 0.0 ? coverToG(liveCloud) : mix(0.46, 0.36, e);                         // lower threshold = more cloud through the night
     float dens = cloudField(p);
     float cloud = smoothstep(0.0, 0.25, dens);
     float cloudAtMoon = smoothstep(0.0, 0.25, cloudField(mc));
@@ -184,7 +196,7 @@ void main() {
         cc *= mix(1.0, 0.68, smoothstep(0.4, 3.2, above));
         float ld = length(p - lightPos);
         cc += lightCol * (1.0 - cloud) * exp(-ld * 3.0) * 0.55;                       // thin edges toward the light glow
-        col = mix(col, cc, cloud);
+        col = mix(col, cc, cloud * (liveCloud >= 0.0 ? liveThick : 1.0));   // thin high cloud: a veil
     }
 
     // ---------------- SNOW: same layers as the road; visible mostly in the moon's light
