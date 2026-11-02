@@ -485,6 +485,8 @@ bool groveTree(int side, int i, out float tT, out float gy, out float cxT, out f
     return true;
 }
 
+// the plough's depth (t) at progress s: constant speed in metres, 12 m <-> 520 m from the camera, either direction
+float ploughT(float s, float dir) { float Z = dir > 0.0 ? mix(12.0, 520.0, s) : mix(520.0, 12.0, s); return 13.04 / Z; }
 // ---- cast shadows on the ground plane, in world metres. The scene's perspective has focal length 1 (uv) and
 //      1 t ~ 13 m, so a ground pixel at depth t sits at lateral X = (x - VP.x) * WSC / t, distance Z = WSC / t.
 const float WSC = 13.04;
@@ -788,7 +790,8 @@ void main() {
     // overlapping lamps take the brighter one (never the sum), and the far lamp is too far off to show a beam
     float pool = max(lampLight(p, lamp1, g1, 1.0, 1.0, h1, c1) * f1, lampLight(p, lamp2, g2, lt2 / lt1, 0.8, h2, c2) * f2);
     float halo = lightSteps(max(h1 * f1, h2 * f2), 3.0, q);
-    float beam = lightSteps(c1 * f1, 2.0, q);
+    float beam = lightSteps(c1 * f1, 1.0, q) * 0.85;   // (for lighting flakes / surfaces)
+    float beamGlow = floor(clamp(c1 * f1, 0.0, 1.0) * 2.0 + 0.45) / 2.0;   // the visible beam: 2 flat bands, clean edges, no dither
     pool = lightSteps(pool, 4.0, q);
     float L = max(pool, beam * 0.5);           // what lit surfaces / flakes / animals see (the beam is light passing through air)
     vec3 warm = vec3(0.86, 0.66, 0.40);
@@ -911,7 +914,7 @@ void main() {
         // snow lying on the road: the plough clears everything closer than itself
         float rc = roadCover;
         if (plough >= 0.0) {                                      // cleared right where the blade scrapes it up
-            float tpl = max(ploughDir > 0.0 ? 1.0 - plough : plough, 0.004);
+            float tpl = ploughT(plough, ploughDir);
             float tb = WSC / max(WSC / tpl + ploughDir * 4.3, 0.5);
             if (ploughDir > 0.0 ? t > tb : t < tb) rc = 0.0;
         }
@@ -1203,8 +1206,8 @@ void main() {
                 useRamp = false, col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.50, 0.51, 0.53)), hazeCol, lfade), li == 0 ? vec3(1.0, 0.86, 0.55) : vec3(0.85, 0.68, 0.42), fl);
         }
         vec3 lsnow = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, lfade);
-        if (p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) useRamp = false, col = lsnow;          // snow cap on the head
-        if (e > 0.15 && p.x >= bc.x + px1 && p.x <= hx0 && p.y > topY + pw * 0.5 && p.y < topY + pw * 0.5 + px1 * (0.6 + 0.6 * e)) useRamp = false, col = lsnow;   // and along the arm
+        if (li == 0 && p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) useRamp = false, col = lsnow;          // snow cap on the head
+        if (li == 0 && e > 0.15 && p.x >= bc.x + px1 && p.x <= hx0 && p.y > topY + pw * 0.5 && p.y < topY + pw * 0.5 + px1 * (0.6 + 0.6 * e)) useRamp = false, col = lsnow;   // and along the arm
     }
 
     bool glint = false; vec3 glintCol = vec3(1.0);    // glitter: exact colours, past the palette (brighter than white snow)
@@ -1300,8 +1303,9 @@ void main() {
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(max(pool * 0.8, beam * 0.25), 0.0, 0.6));   // only the pool warms the fog, not the whole beam
     col = mix(col, fogCol, clamp(fog * houseFog, 0.0, 0.75));
-    col = mix(col, col * vec3(1.06, 0.93, 0.74), 0.6 * beam * smoothstep(0.22, 0.50, dot(col, vec3(0.3, 0.5, 0.2))));   // pale snow behind it warms too
-    col += vec3(0.95, 0.60, 0.26) * beam * (0.09 + 0.04 * snowAmt + 0.04 * fogAmt);   // see-through: the scene shows in it   // the beam: lit snow-haze in the air, only ever brightens
+    // the beam: lit snow-haze in the air. A screen blend toward pale gold: it only ever lightens toward the light's colour, so
+    // it stays a see-through glow (adding orange to dark blue night turned brown and muddy)
+    // (the beam itself is laid over the finished pixel art at the very end, see fragColor)
 
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
@@ -1331,7 +1335,7 @@ void main() {
     vec2 beaconP = vec2(-9.0);
     if (plough >= 0.0 && plough <= 1.0) {
         bool pAway = ploughDir > 0.0;
-        float tp = max(pAway ? 1.0 - plough : plough, 0.004);      // depth: away it starts at the bottom, oncoming at the horizon
+        float tp = ploughT(plough, ploughDir);                     // steady ~15 km/h in metres, near <-> far
         float yb = HZ - tp * HZ;
         float xc = roadCx(yb) + roadHw(yb) * 0.06;
         float Zc = WSC / tp, Xc = (xc - VP.x) * WSC / tp;
@@ -1568,7 +1572,11 @@ void main() {
         col = mix(col, fc, vis); useRamp = false;
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol
+    vec3 outc = tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol
                     : useRamp ? quantizeRamp(col, rampAlb, q, p.y > HZ && zTree < 0.0, pool, hazeCol, fogCol)
-                    : quantize(col, q, p.y > HZ && zTree < 0.0), 1.0) * qt_Opacity;
+                    : quantize(col, q, p.y > HZ && zTree < 0.0);
+    // the near lamp's beam: a translucent pale-gold light laid over the finished pixel art (a screen blend, past the palette),
+    // so the scene shows through it and it can never turn brown or speckled; one flat step with the beam's hard edges
+    if (beamGlow > 0.0) outc = 1.0 - (1.0 - outc) * (1.0 - vec3(1.0, 0.84, 0.58) * beamGlow * (0.20 + 0.06 * snowAmt + 0.06 * fogAmt));
+    fragColor = vec4(outc, 1.0) * qt_Opacity;
 }
