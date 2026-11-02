@@ -11,6 +11,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 ![Dusk](screenshots/4-dusk.png)
 
 - Three depth layers of spruces with atmospheric perspective (distance fades toward the sky) and sun-facing lighting
+- Mountains on the horizon: a hazy, snow-capped far range with one big volcano-like summit and a darker forested ridge in front (ridged multifractal ridgelines with domain warping; buttresses and gullies lit from the sun / moon side; a ragged snowline with snow down the gullies; alpenglow at dawn and dusk; the low sun can set behind a peak)
 - A farmhouse, red barn, log cabin and cottage across the fields, built from 3D solids and ray-cast to pixel art by `tools/gen_houses.py`: snow on the roofs, drifts against the walls, every window lighting up after dark on its own schedule (lights go out one by one between 21:00 and 00:30, a few come back on before dawn, sometimes a TV flickers blue), chimney smoke rising and leaning with the wind
 - Spruces grown procedurally in 3D (whorls of drooping branches, side sprays, snow on the boughs, dead lower twigs, broken tops), baked to a relightable pixel-art atlas by `tools/gen_trees.py` and lit live by the sun, the moon and the lamps; their tops sway in the wind, and the snow on their boughs builds overnight and melts off by day (sunny outer clumps first)
 - One gusty wind for the whole scene: falling snow slants and streams with it, the trees lean in gusts, chimney smoke bends, and strong gusts lift wisps of blowing snow across the fields and the road
