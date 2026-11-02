@@ -174,7 +174,7 @@ Pole pole(int k) {
     P.t = 0.375 / (1.0 + 1.2 * float(k));
     float gy = HZ - P.t * HZ;
     P.base = vec2(roadCx(gy) + 1.86 * P.t, gy);
-    P.top = vec2(P.base.x + (k == 0 ? 0.02 : 0.0), gy + 1.68 * P.t);    // the near one leans
+    P.top = vec2(P.base.x + (k == 0 ? 0.012 : 0.0), gy + 0.90 * P.t);    // ~12 m above ground (1 t ~ 14 m: a lane is 0.26 t); the near one leans
     P.armY = P.top.y - 0.107 * P.t;
     P.armL = vec2(P.top.x - 0.133 * P.t, P.armY);
     P.armR = vec2(P.top.x + 0.120 * P.t, P.armY);
@@ -521,7 +521,7 @@ void main() {
     if (farB > 0.5 && 0.03 > zTree) { tip = tipB; tier = 0.5; SHADE_TREE(p.x, 0.03, false) }
     // ---------------- HOUSES: a farmhouse + barn across the field on the right, a cabin and a cottage far off on the left.
     // Relit like the trees; windows on their own schedules; chimney smoke rising and leaning with the wind.
-    const vec3 CHIM[4] = vec3[4](vec3(0.2244, 0.9007, 1.0), vec3(-0.2827, 0.7336, 1.0), vec3(0.0, 0.0, 0.0), vec3(0.0, 0.6542, 1.0));
+    const vec3 CHIM[4] = vec3[4](vec3(0.2244, 0.9133, 1.0), vec3(-0.2827, 0.7225, 1.0), vec3(0.0, 0.0, 0.0), vec3(0.0, 0.6580, 1.0));
     float houseFog = 1.0;                         // houses (and lit windows even more) cut through the fog
     for (int i = 0; i < 4; i++) {
         float tH = HOUSES[i].y;

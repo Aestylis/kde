@@ -34,7 +34,7 @@ WORLD_H = 12.0                      # metres covered by the box height
 ORIGIN_V = 0.10                     # ground origin height in the box (fraction of the box height)
 WALL, ROOF, SNOW, GLASS, TRIM, DOOR, STONE, SOFFIT = range(8)
 
-YAW, PITCH = math.radians(32), math.radians(7)
+YAW, PITCH = math.radians(32), math.radians(2)   # eye level: the viewer stands on the road
 F = np.array([-math.sin(YAW) * math.cos(PITCH), -math.sin(PITCH), math.cos(YAW) * math.cos(PITCH)])
 R = np.cross([0.0, 1.0, 0.0], F); R /= np.linalg.norm(R)
 U = np.cross(F, R)
