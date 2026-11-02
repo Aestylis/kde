@@ -268,19 +268,30 @@ vec4 spriteTexel(int row, int f, vec2 sp) {                 // sp: sprite pixel,
     return texelFetch(atlas, ivec2(f * fs.x + ip.x, y0 + fs.y - 1 - ip.y), 0);
 }
 
-// lamp light at p: ground pool + cone + halo. head = lamp head position, g = ground y under it, k = strength
-float lampLight(vec2 p, vec2 head, float g, float k, float strength, out float halo) {   // k = perspective size
+// lamp light at p, LutLight-style: smooth shapes, then snapped to a few dithered steps (see lightSteps) so lit pixels land
+// on clean palette bands instead of a soft glob. head = lamp head, g = ground y under it, k = perspective size.
+// Returns the ground pool; `cone` = the beam seen in the air (falling snow / mist), `halo` = the disc round the head.
+float lampLight(vec2 p, vec2 head, float g, float k, float strength, out float halo, out float cone) {
     vec2 d = p - head;
-    halo = strength * exp(-dot(d, d) / (0.0016 * k));
-    float below = head.y - p.y;
-    float cone = 0.0;
-    if (below > 0.0) {
-        float r = below * 0.55 + 0.004;
-        cone = smoothstep(r, r * 0.25, abs(d.x)) * smoothstep(head.y - g + 0.02 * k, 0.0, below) * strength;
+    float hr = length(d) / (0.030 * k);
+    halo = strength * clamp(1.0 - hr, 0.0, 1.0);
+    halo *= halo;
+    cone = 0.0;
+    float top = head.y - 0.008 * k, H = top - g, below = top - p.y;
+    if (below > 0.0 && below < H + 0.012 * k) {
+        float r = 0.010 * k + below * (0.13 / max(H, 1e-4)) * k;          // beam widens to the pool's width at the ground
+        float ax = abs(d.x) / r;
+        cone = (1.0 - smoothstep(0.88, 1.0, ax))                         // hard edge
+             * (1.0 - 0.35 * ax)                                         // a touch brighter down the middle
+             * mix(1.0, 0.45, clamp(below / H, 0.0, 1.0)) * strength;    // fades as it spreads
     }
-    vec2 pd = vec2((p.x - head.x) / (0.20 * k), (p.y - g) / (0.045 * k));
-    float pool = exp(-dot(pd, pd)) * strength;
-    return max(cone * 0.75, pool);
+    vec2 pd = vec2((p.x - head.x) / (0.16 * k), (p.y - g) / (0.036 * k));
+    float r2 = dot(pd, pd);
+    return strength * pow(clamp(1.0 - r2, 0.0, 1.0), 0.8);
+}
+// snap a light level to n bands, with a 4x4-dithered seam between neighbouring bands
+float lightSteps(float x, float n, vec2 q) {
+    return clamp(floor(x * n + bayer4(q) * 0.9 + 0.05) / n, 0.0, 1.0);
 }
 
 // Lamp flicker: time is split into windows; a window hosts a stutter episode with probability `chance`.
@@ -323,10 +334,12 @@ void main() {
     float boot2 = lampAge < 6.5 ? mix(step(0.55, hash11(floor(lampAge * 7.0) + 9.0)), 1.0, smoothstep(4.0, 6.5, lampAge)) : 1.0;
     f1 *= lamps * boot1;
     f2 *= lamps * boot2;
-    float h1, h2;
-    float L = lampLight(p, lamp1, g1, 1.0, 1.0, h1) * f1 + lampLight(p, lamp2, g2, lt2 / lt1, 0.8, h2) * f2;
-    h1 *= f1; h2 *= f2;
-    float halo = h1 + h2;
+    float h1, h2, c1, c2;
+    float pool = lampLight(p, lamp1, g1, 1.0, 1.0, h1, c1) * f1 + lampLight(p, lamp2, g2, lt2 / lt1, 0.8, h2, c2) * f2;
+    float halo = lightSteps(h1 * f1 + h2 * f2, 3.0, q);
+    float beam = lightSteps(c1 * f1 + c2 * f2, 3.0, q);
+    pool = lightSteps(pool, 4.0, q);
+    float L = max(pool, beam * 0.8);           // what lit surfaces / flakes / animals see
     vec3 warm = vec3(0.86, 0.66, 0.40);
 
     // ---------------- SKY
@@ -590,7 +603,8 @@ void main() {
 
     // ---------------- LAMPLIGHT on the scene (snow takes the warm light; dark shapes barely)
     float lum = dot(col, vec3(0.3, 0.5, 0.2));
-    col = mix(col, col + warm * 0.55, clamp(L, 0.0, 1.0) * smoothstep(0.08, 0.30, lum));
+    col = mix(col, col + warm * 0.55, clamp(pool, 0.0, 1.0) * smoothstep(0.08, 0.30, lum));
+    col = mix(col, col * 0.6 + warm * 0.30, clamp(pool, 0.0, 1.0) * (1.0 - smoothstep(0.08, 0.30, lum)) * 0.6);   // dark ground still catches it
 
     // ---------------- FOG (thickens with the night; warmed in lamplight; dithered by the quantizer)
     float fogH = exp(-max(0.0, p.y - HZ + 0.06) * 5.0);
@@ -599,6 +613,7 @@ void main() {
     fog += fogAmt * e * 0.18 * smoothstep(0.25, 0.0, abs(p.x - roadCx(p.y))) * step(p.y, HZ);   // the road fades first
     vec3 fogCol = mix(mix(DN(vec3(0.17, 0.20, 0.26), vec3(0.84, 0.87, 0.90)), glow, twi * 0.22), warm * 0.75, clamp(L * 0.8, 0.0, 0.7));
     col = mix(col, fogCol, clamp(fog, 0.0, 0.75));
+    col = mix(col, col * vec3(1.15, 0.95, 0.70) + vec3(0.95, 0.60, 0.26) * (0.08 + 0.06 * snowAmt + 0.06 * fogAmt), beam * 0.7);   // the beam: lit snow-haze, pushed warm so even its faint band reads amber         // the beam itself, lit snow-haze in the air
 
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
