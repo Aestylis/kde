@@ -19,9 +19,49 @@ WallpaperItem {
 
     readonly property int pixelSize: main.configuration.pixelSize || 4
     readonly property int fps: main.configuration.fps || 24
-    readonly property real snowAmt: (main.configuration.snowDensity !== undefined ? main.configuration.snowDensity : 50) / 100
+    readonly property real snowAmt: Math.min(1, (main.configuration.snowDensity !== undefined ? main.configuration.snowDensity : 50) / 100 * (liveOn ? liveSnowF : 1))
     readonly property real fogAmt: (main.configuration.fogDensity !== undefined ? main.configuration.fogDensity : 50) / 50
-    readonly property real windAmt: (main.configuration.windStrength !== undefined ? main.configuration.windStrength : 50) / 50
+    readonly property real windAmt: (main.configuration.windStrength !== undefined ? main.configuration.windStrength : 50) / 50 * (liveOn ? liveWindF : 1)
+
+    // ------------------------------------------------------------------ live weather (opt-in): open-meteo.com, every 15 min
+    // wind speed / gusts -> wind strength (5 m/s feels like the default), wind direction -> which way things blow (the view
+    // faces the sun's arc, roughly south, so screen-right is west), snowfall -> flake density, cloud cover -> clouds.
+    // Readings older than 2 h are ignored (procedural weather returns).
+    readonly property bool liveWeather: main.configuration.liveWeather === true
+    property bool liveOn: false
+    property real liveWindF: 1
+    property real liveSnowF: 1
+    property real liveCloud: -1
+    property real windDirEff: 1
+    property var wx: null
+    property real wxAt: 0
+    function fetchWeather() {
+        if (!liveWeather) return
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr.status === 200) {
+                try { wx = JSON.parse(xhr.responseText).current; wxAt = Date.now() } catch (err) {}
+            }
+            applyWeather()
+        }
+        xhr.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + latitude.toFixed(3) + "&longitude=" + longitude.toFixed(3)
+                 + "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,snowfall,cloud_cover&wind_speed_unit=ms")
+        xhr.send()
+    }
+    function applyWeather() {
+        var ok = liveWeather && wx !== null && Date.now() - wxAt < 2 * 3600 * 1000
+        liveOn = ok
+        if (!ok) { liveCloud = -1; windDirEff = 1; return }
+        var lateral = Math.sin(wx.wind_direction_10m * Math.PI / 180)      // + : blowing toward the west = screen right
+        var speed = Math.max(wx.wind_speed_10m, 0.6 * wx.wind_gusts_10m)
+        liveWindF = Math.min(2, speed / 5) * (0.4 + 0.6 * Math.abs(lateral))
+        windDirEff = lateral >= 0 ? 1 : -1
+        liveSnowF = wx.snowfall > 0 ? Math.min(2, 0.6 + 2.0 * wx.snowfall) : 0.12   // not snowing: a few stray flakes
+        liveCloud = Math.max(0, Math.min(1, wx.cloud_cover / 100))
+    }
+    onLiveWeatherChanged: { if (liveWeather) fetchWeather(); else applyWeather() }
+    Timer { interval: 15 * 60 * 1000; running: main.liveWeather; repeat: true; triggeredOnStart: true; onTriggered: main.fetchWeather() }
     readonly property real flickerAmt: (main.configuration.flicker !== undefined ? main.configuration.flicker : 50) / 50
     readonly property int scene: main.configuration.scene || 0               // 0 road, 1 sky (for a monitor above)
     readonly property int erosionMode: main.configuration.erosionMode || 0   // 0 follows the day, 1 always clear, 2 always buried
@@ -377,6 +417,8 @@ WallpaperItem {
         property real snowAmt: main.snowAmt
         property real fogAmt: main.fogAmt
         property real windAmt: main.windAmt
+        property real windDir: main.windDirEff
+        property real liveCloud: main.liveCloud
         property real erosion: 0
         property real flickerAmt: main.flickerAmt          // 0..2: up to 1 = depth, beyond = more often
         property real day: 0

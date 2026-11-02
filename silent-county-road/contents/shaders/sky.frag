@@ -27,6 +27,8 @@ layout(std140, binding = 0) uniform buf {
     float rising;     // 1 morning, 0 evening
     float sunX;       // 0..1 across the screen
     float sunElev;    // degrees
+    float windDir;    // +1 / -1 (live weather)
+    float liveCloud;  // live cloud cover 0..1, or -1 (procedural)
     vec2 res;
 };
 
@@ -113,7 +115,7 @@ void main() {
     float e = erosion;
 
     // wind: identical formula to the road scene so the snow drifts the same way on both screens
-    float wind = windAmt * (time * 0.8 + 70.0 * noise1(time / 75.0) + 25.0 * noise1(time / 23.0) + 140.0 * pow(noise1(time / 140.0 + 9.0), 4.0));
+    float wind = windDir * windAmt * (time * 0.8 + 70.0 * noise1(time / 75.0) + 25.0 * noise1(time / 23.0) + 140.0 * pow(noise1(time / 140.0 + 9.0), 4.0));
 
     // ---------------- SKY: bottom edge = road scene's upper sky, deepening upward
     vec3 col = mix(DN(vec3(0.045, 0.06, 0.11), vec3(0.44, 0.60, 0.84)), DN(vec3(0.022, 0.032, 0.07), vec3(0.30, 0.46, 0.76)), pow(p.y, 0.8));
@@ -134,7 +136,7 @@ void main() {
 
     // ---------------- CLOUDS
     gWind = wind;
-    gCover = mix(0.46, 0.36, e);                         // lower threshold = more cloud through the night
+    gCover = mix(0.46, 0.36, e) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);                         // lower threshold = more cloud through the night
     float dens = cloudField(p);
     float cloud = smoothstep(0.0, 0.25, dens);
     float cloudAtMoon = smoothstep(0.0, 0.25, cloudField(mc));

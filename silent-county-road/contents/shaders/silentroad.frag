@@ -52,6 +52,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 animal;     // x (uv; < -50 none), depth t, dir (+1 right / -1 left), type (0 deer, 1 fox)
     vec4 animal2;    // walk phase (radians), graze/sniff 0..1, buck (0/1), unused
     float treeSnow;  // 0..1 snow lying on the spruces (builds overnight, melts by day down to ~0.4)
+    float windDir;   // +1 the wind blows left->right on screen, -1 right->left (live weather)
+    float liveCloud; // live cloud cover 0..1, or -1 (procedural)
     vec4 belt;       // x = anti-sun point across the screen (0..1 of width, may lie off-screen), y = degrees per screen width
     vec4 windKnock;  // x = how much wire snow the wind has shaken off since sunset (0..0.45), y = the same 1.6 s ago
     float localHour; // local clock hour 0..24 (the preview hour when previewing): drives the house windows / chimneys
@@ -313,7 +315,7 @@ bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
         float hgt = float(iy) / float(bh);
         float g = gustAt(time - cx * 2.0);
         float lean = 0.25 + 0.75 * g + 0.12 * sin(time * (1.4 + 0.4 * hash11(seed)) + seed * 5.0) * (0.4 + g);
-        ix -= int(floor(0.020 * float(bh) * min(windAmt, 2.0) * hgt * hgt * lean + 0.5));
+        ix -= int(windDir) * int(floor(0.020 * float(bh) * min(windAmt, 2.0) * hgt * hgt * lean + 0.5));
     }
     if (ix < 0 || ix >= bw) return false;
     int v = int(hash11(seed * 1.37 + 0.5) * 11.999);
@@ -509,6 +511,7 @@ void main() {
         float gL1 = max(gustAt(time - post1 * 2.0), 0.0), gL2 = max(gustAt(time - post2 * 2.0), 0.0);
         sw1 = min(windAmt, 2.0) * 0.0045 * lt1 * smoothstep(0.35, 1.0, gL1) * (0.75 + 0.25 * sin(time * 2.1));
         sw2 = min(windAmt, 2.0) * 0.0045 * lt2 * smoothstep(0.35, 1.0, gL2) * (0.75 + 0.25 * sin(time * 2.4 + 1.3));
+        sw1 *= windDir; sw2 *= windDir;
         lamp1.x += sw1; lamp2.x += sw2;
     }
     float f1 = mix(1.0, flicker(time, 3.0, 90.0, 0.35 * max(flickerAmt, 1.0)), min(flickerAmt, 1.0));           // near lamp: rare stutters
@@ -537,7 +540,7 @@ void main() {
     col = mix(col, glow, twi * 0.75 * exp(-sk * 3.0));                             // horizon glow at dawn/dusk
     // clouds: same recipe + lighting as the sky screen, thinning toward the horizon so the two monitors read as one sky
     if (p.y > HZ) {
-        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y));
+        gCover = mix(0.46, 0.36, e) + 0.12 * (1.0 - smoothstep(HZ, HZ + 0.35, p.y)) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);
         float dens = cloudField(p);
         float cl = smoothstep(0.0, 0.25, dens);
         if (cl > 0.0) {
@@ -768,8 +771,8 @@ void main() {
         // lee drift: wind-blown snow banks up downwind of the building (to the right), tapering away from the wall
         if (tH > zTree) {
             float halfW = (v == 0 ? 0.56 : v == 1 ? 0.40 : v == 2 ? 0.44 : 0.47) * hb;
-            float x0 = cxH + halfW * 0.92, L = (0.30 + 0.25 * e) * hb, hd = (0.035 + 0.04 * e) * hb;
-            float u = (p.x - x0) / L;
+            float x0 = cxH + windDir * halfW * 0.92, L = (0.30 + 0.25 * e) * hb, hd = (0.035 + 0.04 * e) * hb;   // downwind side
+            float u = (p.x - x0) * windDir / L;
             if (u > 0.0 && u < 1.0) {
                 float dh = hd * pow(1.0 - u, 1.6) * (0.85 + 0.3 * vnoise(vec2(p.x / px1 * 0.4, float(i))));
                 if (p.y >= gy - 0.012 * hb && p.y < gy + max(dh, 0.5 * px1)) {
@@ -787,7 +790,7 @@ void main() {
             float S = 1.1 * hb, dy = p.y - ch.y;
             if (fire && dy > 0.0 && dy < S && tH > zTree) {
                 float k = dy / S;
-                float drift = (0.10 + 0.45 * windAmt * (0.6 + 1.6 * max(gustAt(time - cxH * 2.0), 0.0))) * dy * k + 0.03 * hb * sin(dy / hb * 7.0 - time * 0.7) * k;   // rises, then leans downwind
+                float drift = windDir * (0.10 + 0.45 * windAmt * (0.6 + 1.6 * max(gustAt(time - cxH * 2.0), 0.0))) * dy * k + 0.03 * hb * sin(dy / hb * 7.0 - time * 0.7) * k;   // rises, then leans downwind
                 float w = hb * (0.04 + 0.16 * sqrt(k));
                 float dx = abs(p.x - ch.x - drift);
                 float puff = vnoise(vec2((p.x - drift) / hb * 14.0, dy / hb * 9.0 - time * 0.9)) * 0.6
@@ -949,8 +952,8 @@ void main() {
             vec2 w = vec2((p.x - VP.x) / tg, 1.0 / tg);                // world position on the ground (lateral, distance)
             vec2 cp = vec2(w.x * 0.07 + time * 0.010, w.y * 0.22);     // drifts the same way as the sky clouds
             float n = fbm(cp) * 0.75 + fbm(cp * 2.1 + 5.0) * 0.35;
-            float cov = mix(0.50, 0.40, e);
-            float overcast = 1.0 - 0.6 * smoothstep(0.6, 0.95, e);                                    // thick overcast: no distinct shadows
+            float cov = mix(0.50, 0.40, e) + (liveCloud >= 0.0 ? 0.20 - 0.36 * liveCloud : 0.0);
+            float overcast = (1.0 - 0.6 * smoothstep(0.6, 0.95, e)) * (liveCloud >= 0.0 ? 1.0 - 0.75 * smoothstep(0.7, 1.0, liveCloud) : 1.0);                                    // thick overcast: no distinct shadows
             float sh = smoothstep(cov, cov + 0.10, n) * sunUp * overcast;
             // cast shadows: trees, houses, poles and lamp posts throw shadows away from the sun, long when it is low
             if (!isTree && p.y < HZ) {
@@ -1169,7 +1172,7 @@ void main() {
     }
 
     // ---------------- WIND mood: smooth offset whose slope changes like weather
-    float wind = windX(time);
+    float wind = windDir * windX(time);
 
     // ---------------- SNOW (in pixel units; 3 layers + rare near flakes)
     vec2 pp = q + 0.5;
@@ -1177,7 +1180,7 @@ void main() {
     // turbulence: a divergence-free swirl (curl of a slow noise) bends the flakes' paths so they eddy together instead of
     // sliding in lockstep; stronger in gusts. Streaks: in strong gusts the near flakes smear along their motion.
     float gS = max(gustAt(time - p.x * 2.0), 0.0);
-    float vNow = (windX(time + 0.25) - windX(time - 0.25)) * 2.0;                  // wind speed now, px/s
+    float vNow = windDir * (windX(time + 0.25) - windX(time - 0.25)) * 2.0;                  // wind speed now, px/s
     vec2 ep = pp / 90.0 + vec2(time * 0.04, -time * 0.02);
     float e0 = vnoise(ep), ex = vnoise(ep + vec2(0.05, 0.0)), ey = vnoise(ep + vec2(0.0, 0.05));
     vec2 curl = vec2(ey - e0, -(ex - e0)) / 0.05;

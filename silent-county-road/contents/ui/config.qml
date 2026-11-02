@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 Kirigami.FormLayout {
@@ -16,6 +17,7 @@ Kirigami.FormLayout {
     property alias cfg_fogDensity: fogSlider.value
     property alias cfg_windStrength: windSlider.value
     property alias cfg_flicker: flickerSlider.value
+    property alias cfg_liveWeather: liveCheck.checked
     property alias cfg_erosionMode: erosionCombo.currentIndex
     property real cfg_latitude: 42.51
     property real cfg_longitude: -123.39
@@ -79,6 +81,18 @@ Kirigami.FormLayout {
         text: i18n("Default: Grants Pass, OR (west is negative). Drives real sunrise, sunset and sun position.")
         font: Kirigami.Theme.smallFont
         opacity: 0.7
+    }
+    QQC2.CheckBox {
+        id: liveCheck
+        Kirigami.FormData.label: i18n("Live weather:")
+        text: i18n("Use the real wind, snowfall and cloud cover")
+    }
+    QQC2.Label {
+        text: i18n("From open-meteo.com (free, no account): the latitude and longitude above are sent every 15 minutes. The Wind and Snow sliders scale the live values. Off: the weather is procedural.")
+        font: Kirigami.Theme.smallFont
+        opacity: 0.7
+        wrapMode: Text.WordWrap
+        Layout.maximumWidth: Kirigami.Units.gridUnit * 26
     }
     QQC2.ComboBox {
         Kirigami.FormData.label: i18n("Time of day:")
