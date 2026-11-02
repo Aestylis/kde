@@ -10,6 +10,10 @@ Realism pass (from the 2026-11-01 research: palette ramps, dithering, sky models
 - [x] **Snow that settles by slope and shelter.** Snow caps on fence posts, both lamp heads, along the lamp arms and on the near crossarms; lee drifts (downwind, to the right) beside the buildings, with a bright crest and blue-shaded flank.
 - [x] **Shading ramps for each material.** Every material gets its own hue-shifted ramp (cool shadows, warm highlights, about 20° of hue over 3–5 steps) and light picks a step on it, replacing the snap to the nearest of 23 palette colours. LutLight2D-style.
 
+Later:
+
+- [ ] **Optimization run.** Measured 2026-11-02: GPU ~14% busy (whole desktop), plasmashell 0–4% of one core, ~500 MB. Ideas: profile which shader sections cost most (render with sections disabled and compare); early-outs for the cast-shadow caster loops and grove placement (bounding checks per pixel row); fewer `gustAt` calls (once per tree, not per texel); cache the static layers (mountains, far treeline, houses) in a texture that only re-renders when the light changes; lower the QML timer work (traffic / wildlife / wind-knock run every frame). Goal: keep the store claim "1–3% of a single core" true at every reading.
+
 Done:
 
 - [x] Wind sway on the trees (shared gusty wind: `windX` / `gustAt` in the shader)
