@@ -60,7 +60,7 @@ Install from:
 
 Or manually:
 
-`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-1.2.tar.gz`
+`kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.0.tar.gz`
 
 ### Source
 
@@ -68,7 +68,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**1.2:** Optional live weather from open-meteo.com (real wind, snowfall and cloud cover for your location, off by default); snow-capped mountains on the horizon (alpenglow at dawn and dusk); a farmhouse, red barn, log cabin and cottage across the fields: every window on its own evening schedule (and a flickering TV), chimney smoke leaning with the wind; wildlife (a deer by day, a fox by night) that traffic stops for; procedurally grown spruces (drooping branch whorls, snow on the boughs that melts by day and builds overnight) that sway in the wind; one gusty wind driving the snowfall, the trees, the chimney smoke and blowing ground snow; banded pixel-art lamplight with a visible beam; passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); three depth layers of trees with atmospheric perspective; cloud shadows drifting across the snow; rendering at pixel-art resolution for much lower GPU use.
+**2.0:** A full landscape. Optional live weather from Open-Meteo (wind, gusts, direction, snowfall, cloud cover and cloud type); moonlight and sunlight cast shadows; Earth's shadow and the Belt of Venus at twilight; three mountain ranges with alpenglow; procedurally grown spruces that sway, hold snow overnight and shed it by day; a farmhouse, red barn, cabin and cottage with chimney smoke and windows on their own evening schedules; 1980s traffic and a full-sized county snowplow drawn in 3D through the scene's camera; deer by day, foxes at night, birds on the wire; one gusty wind driving snow, trees, wires, smoke and streetlamps; snow glitter; material-specific shading ramps and dithering.
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 
@@ -77,9 +77,9 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 ### Other fields
 
 **Category:** Plasma 6 Wallpaper Plugins
-**Version:** 1.2
+**Version:** 2.0
 **Licence:** MIT
 **Homepage / source:** https://github.com/Aestylis/kde/tree/main/silent-county-road
-**File:** `dist/silent-county-road-1.2.tar.gz` (run `./build.sh`)
+**File:** `dist/silent-county-road-2.0.tar.gz` (run `./build.sh`)
 
 **Screenshots:** `screenshots/1-night.png` through `screenshots/6-sky-day.png`
