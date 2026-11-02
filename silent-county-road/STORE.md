@@ -6,23 +6,31 @@ A quiet pixel-art winter road that follows the real time of day, with a tiny sno
 
 ### Description
 
-A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader, including a little farm across the field (farmhouse, red barn, a cabin and a cottage, with windows lighting up after dark and smoke from the chimneys) and the spruces, which are grown procedurally in 3D, baked to pixel art and relit live by the sun, the moon and the lamps. Clouds are lit by the real sun or moon: bright, sun-facing tops, darker undersides, golden edges at sunset.
+A fully procedural pixel-art winter landscape that follows the real time of day and can even reflect the weather outside.
 
-The wallpaper follows the real time of day. Sunrise, sunset and the sun's position are calculated from your latitude and longitude. The scene changes between hand-picked palettes for night, dawn, day and dusk, with cold blue nights, rose mornings, clear winter days and mauve evenings.
+### Features
 
-### Details
+- **Location-based day and night:** Uses your latitude, longitude, date and time to calculate sunrise, sunset, sun position, moon position and lunar phases.
+- **Realistic skies:** Changing colors throughout the day, including dawn, dusk, Earth's shadow and the pink Belt of Venus.
+- **Optional live weather:** Connects to Open-Meteo every 15 minutes for actual cloud cover, cloud types, snowfall, wind speed, gusts and direction. Falls back to simulated weather when offline.
+- **Dynamic clouds:** Realistic coverage, with low, middle and high cloud setting how dense or thin the sky looks, lit by sunlight and moonlight, with moving cloud shadows.
+- **Wind simulation:** Wind affects everything together, from swaying trees and power lines to drifting snow, chimney smoke and even streetlamps.
+- **Natural lighting:** Sunlight and moonlight create directional shadows that change with the time of day. Cloud cover softens them, while snow glitters in sunlight and lamplight.
+- **Layered landscape:** Snow-covered mountains, distant ridges and spruce forests with atmospheric haze and changing light.
+- **Living trees:** Procedurally generated spruces sway in the wind, collect snow overnight and gradually shed it during the day.
+- **Rural buildings:** A farmhouse, barn, cabin and cottage with snowy roofs, chimney smoke and windows that turn on and off throughout the evening.
+- **Winter weather:** Snow falls at different depths, collects on surfaces, forms drifts and blows across the landscape during gusts.
+- **Passing traffic:** Classic 1980s vehicles travel in both directions with working lights, reflections, accumulating roof snow and tire tracks that slowly disappear.
+- **Wildlife:** Deer during the day, foxes at night and birds occasionally gathering on power lines. Vehicles stop for crossing animals.
+- **Streetlamps:** Automatically switch on at dusk and off at sunrise, with occasional flickering and wind movement.
+- **Morning snowplough:** Clears overnight snowfall about 25 minutes after sunrise, coming toward you one morning and driving away the next. Can also be sent manually from settings.
+- **Custom pixel-art rendering:** Procedural 3D scenery converted into pixel art, with material-specific color palettes, shading and dithering.
+- **Dual-monitor support:** An optional Sky scene displays the same sun, moon and weather on a second monitor, synchronized with the main wallpaper.
+- **Lightweight:** Approximately 1–3% usage of a single CPU core.
 
-- Snow falls in three depth layers. At night, it is mostly visible when passing through the lamplight.
-- The streetlamps turn off after sunrise and back on at dusk. They occasionally flicker, especially the far lamp.
-- Snow builds on the road overnight while the fog thickens and the fence posts slowly disappear.
-- About 25 minutes after sunrise, a small snowplough with an amber beacon clears the road.
-- A **Send the plough** button lets you trigger it manually.
-- Wind shifts between calm, drifting and gusty conditions.
-- Snowfall comes and goes in patches.
-- Now and then a car, pickup or van passes in either direction, with headlights or tail lights at night. Its tyre tracks slowly fill back in with snow.
-- Snow builds up on the power lines overnight and drops off in clumps through the late morning.
-- A deer wanders through by day, stopping to graze; at night a fox trots along the verge under the lamps. Cars brake and wait for anything crossing in front of them. (Animal sprites: CC0, "Animated Wild Animals" by ScratchIO.) There are **Send wildlife** and **Send a car** buttons too.
-- By day, small flocks of birds fly in, sit on the wire for a few minutes, then fly off.
+Live weather is optional and disabled by default. It requires no account and shares only your configured coordinates with Open-Meteo.
+
+Wildlife sprites: CC0, *Animated Wild Animals* by ScratchIO. See `contents/images/CREDITS.md`.
 
 ### Two monitors
 

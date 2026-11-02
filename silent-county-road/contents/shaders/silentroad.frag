@@ -593,13 +593,7 @@ bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
         else if (k == 4) boxPl(vec3(-0.70, 2.95, 5.30), vec3(0.70, 3.12, 5.60), pl, cnt);  // beacon light bar on the cab
         else if (k <= 7) plBlade(k - 5, pl, cnt);                                            // curved moldboard, 3 facets
         else if (k == 8) boxPl(vec3(-0.60, 0.35, 8.00), vec3(0.60, 0.80, 8.75), pl, cnt);   // push frame
-        else if (k == 9) {                                                                   // snow rolling ahead of the blade
-            vec3 nb = bladeN();
-            pl[0] = vec4(-nb, -dot(nb, vec3(0.0, 0.0, 9.05))); pl[1] = vec4(nb, dot(nb, vec3(0.0, 0.0, 9.95)));
-            pl[2] = vec4(0, -1, 0, 0.0); pl[3] = plT(vec3(-0.30, 1.0, 0.0), vec3(1.0, 0.95, 0.0)); pl[4] = vec4(-1, 0, 0, 2.6); pl[5] = vec4(1, 0, 0, 3.7); cnt = 6;
-        }
-        else if (k == 10 || k == 11) { float sx = k == 10 ? -1.0 : 1.0, zr = 8.85 - sx * 3.1 * tan(radians(15.0));   // blade guide rods
-            boxPl(vec3(sx * 3.1 - 0.03, 1.2, zr - 0.03), vec3(sx * 3.1 + 0.03, 2.6, zr + 0.03), pl, cnt); }
+        else if (k <= 11) cnt = 0;                                                           // (snow is ellipsoids, see carTrace)
         else if (k == 12) boxPl(vec3(-0.85, 2.25, 7.30), vec3(0.85, 2.42, 7.42), pl, cnt);  // plough lights on the hood
         else if (k == 13 || k == 14) { float sx = k == 13 ? -1.0 : 1.0;                      // big mirrors
             boxPl(vec3(min(sx * 1.30, sx * 1.48), 1.95, 6.15), vec3(max(sx * 1.30, sx * 1.48), 2.60, 6.25), pl, cnt); }
@@ -611,6 +605,16 @@ bool carPart(int ty, int k, out vec4 pl[7], out int cnt, out int pid) {
     return true;
 }
 float carLen(int ty) { return ty == 0 ? 4.6 : ty == 1 ? 5.3 : ty == 2 ? 4.9 : 9.0; }
+bool ellip(vec3 ro, vec3 rd, vec3 c, vec3 r, out float t, out vec3 n) {
+    vec3 o = (ro - c) / r, d = rd / r;
+    float a = dot(d, d), b = dot(o, d), cc = dot(o, o) - 1.0, h = b * b - a * cc;
+    t = 0.0; n = vec3(0.0, 1.0, 0.0);
+    if (h < 0.0) return false;
+    t = (-b - sqrt(h)) / a;
+    if (t <= 0.0) return false;
+    n = normalize((ro + rd * t - c) / (r * r));
+    return true;
+}
 // nearest hit along the ray (local frame); returns the part id or -1
 int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
     bt = 1e9; bn = vec3(0.0); bp = vec3(0.0); int best = -1;
@@ -619,6 +623,19 @@ int carTrace(int ty, vec3 ro, vec3 rd, out float bt, out vec3 bn, out vec3 bp) {
         if (!carPart(ty, k, pl, cnt, pid)) break;
         float t; vec3 n;
         if (cvx(ro, rd, pl, cnt, t, n) && t < bt) { bt = t; bn = n; best = pid; }
+    }
+    if (ty == 3) {                                        // rounded snow: lumps rolling off the blade's right end, a heap in the body
+        for (int i = 0; i < 4; i++) {
+            float x = 1.55 + 0.62 * float(i);
+            vec3 c = i < 3 ? vec3(x, 0.30 + 0.06 * float(i % 2), 8.80 - x * tan(radians(15.0)) + 0.55 + 0.08 * float(i))
+                           : vec3(0.0, 2.30, 2.20);
+            vec3 r = i < 3 ? vec3(0.62 - 0.08 * float(i), 0.50 - 0.06 * float(i), 0.58) : vec3(1.12, 0.50, 1.95);
+            float t; vec3 n;
+            if (ellip(ro, rd, c, r, t, n) && t < bt) {
+                vec3 P = ro + rd * t;
+                if (i < 3 || (P.y > 2.36 && abs(P.x) < 1.22 && P.z > 0.15 && P.z < 4.25)) { bt = t; bn = n; best = 9; }
+            }
+        }
     }
     if (best >= 0) bp = ro + rd * bt;
     return best;
@@ -1354,8 +1371,12 @@ void main() {
                 }
                 else if (cm == C_PLATE) c = vec3(0.86, 0.86, 0.78) * light;
                 else if (cm == 8) c = on ? vec3(1.0, 0.80, 0.45) : vec3(0.43, 0.33, 0.21);
-                else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * (0.80 + 0.20 * nw.y);   // snow on the blade / in the body
-                exact = true; exactCol = mix(clamp(c, 0.0, 1.0), fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tp) * 0.8);
+                else {                                                                      // snow: the ground's ramp, lumpy
+                    c = ALB_SNOW * light * (0.90 + 0.18 * vnoise(cP.xz * 5.0 + cP.y * 3.0));
+                    c = quantizeRamp(c, ALB_SNOW, q, false, L, hazeCol, fogCol);
+                }
+                bool rimCut = cm == C_SNOW && dot(nw, -rdw) < 0.32 && bayer4(q) > dot(nw, -rdw) / 0.32;   // soft, dithered edge
+                if (!rimCut) exact = true; exactCol = mix(clamp(c, 0.0, 1.0), fogCol, clamp(fog, 0.0, 0.75) * (1.0 - tp) * 0.8);
             }
         }
         float Eh = HZ * WSC, Zb = pAway ? Zc + 0.95 : Zc - 0.95;   // beacon bar on the cab: project (X, 3.0 m) onto the screen
@@ -1424,7 +1445,7 @@ void main() {
                 }
                 else if (cm == C_PLATE) c = vec3(0.86, 0.86, 0.78) * light;
                 else if (cm == C_GRILLE) c = vec3(0.09, 0.09, 0.10) * (0.8 + 0.3 * kd);
-                else c = DN(vec3(0.40, 0.44, 0.53), vec3(0.94, 0.95, 0.97)) * (0.82 + 0.18 * nw.y);   // roof snow
+                else c = quantizeRamp(ALB_SNOW * light * (0.92 + 0.12 * vnoise(cP.xz * 6.0)), ALB_SNOW, q, false, L, hazeCol, fogCol);   // roof snow: the ground's ramp
                 exactCol = clamp(c, 0.0, 1.0);
             }
         }
