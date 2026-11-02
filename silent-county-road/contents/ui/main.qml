@@ -296,9 +296,17 @@ WallpaperItem {
         smooth: false
     }
 
+    Image {                                   // procedurally grown spruces, relit in the shader (tools/gen_trees.py)
+        id: treeAtlasImg
+        source: Qt.resolvedUrl("../images/trees.png")
+        visible: false
+        smooth: false
+    }
+
     ShaderEffect {
         id: fx
         property var atlas: wildlifeAtlas
+        property var treeAtlas: treeAtlasImg
         anchors.fill: parent
         property real time: main.clockSeconds()
         // block size in PHYSICAL pixels, so a scaled monitor gets the same-size pixels as an unscaled one

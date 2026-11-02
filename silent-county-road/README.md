@@ -11,6 +11,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 ![Dusk](screenshots/4-dusk.png)
 
 - Three depth layers of spruces with atmospheric perspective (distance fades toward the sky) and sun-facing lighting
+- Spruces grown procedurally in 3D (whorls of drooping branches, side sprays, snow on the boughs, dead lower twigs, broken tops), baked to a relightable pixel-art atlas by `tools/gen_trees.py` and lit live by the sun, the moon and the lamps
 - Cloud shadows drifting across the snowfield, the road and the trees on sunny days
 - Clouds lit by the real sun or moon: sunlit tops, dark undersides, golden edges at sunset
 - Real sunrise / sunset / sun position for your latitude and longitude; hand-picked palettes for night, dawn, day, dusk

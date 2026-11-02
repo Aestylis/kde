@@ -2,7 +2,7 @@
 // Silent County Road — procedural pixel-art winter night (Plasma 6 wallpaper).
 // One pass: every screen pixel is snapped to a coarse pixel grid, the scene is evaluated analytically at that grid
 // pixel, then ordered-dithered into a fixed 16-colour palette. No textures, no CPU-side state:
-//   SCENE  sky, tree lines, road + snowbanks, poles, wire, streetlamps, fence (static, from fixed layout + hashes)
+//   SCENE  sky, tree lines (far: procedural; groves + near: grown spruces from images/trees.png), road + snowbanks, poles, wire, streetlamps, fence (static, from fixed layout + hashes)
 //   LIGHT  two warm lamp pools / cones / halos
 //   FOG    slow value-noise fog, thickest near the horizon, warmed inside lamplight
 //   SNOW   hash-generated flakes in 3 depth layers + rare near flakes; nearly invisible unless lamp-lit
@@ -53,6 +53,7 @@ layout(std140, binding = 0) uniform buf {
     vec2 res;        // item size
 };
 layout(binding = 1) uniform sampler2D atlas;     // wildlife sprite atlas (see contents/images/CREDITS.md)
+layout(binding = 2) uniform sampler2D treeAtlas; // grown spruces: normal.xy, material*64+ao, coverage (tools/gen_trees.py)
 
 // ------------------------------------------------------------------ utilities
 float hash11(float n) { return fract(sin(n * 127.1) * 43758.5453); }
@@ -198,38 +199,27 @@ float spruces(vec2 p, float baseY, float cw, float hMin, float hMax, float seed,
     return inside;
 }
 
-// one hand-placed spruce: base y, centre x, height; tip = snowy tier end
-float spruce(vec2 p, float baseY, float cx, float h, float seed, inout float tip) {
-    float y = p.y - baseY;
-    if (y < 0.0 || y > h) return 0.0;
-    float tiers = 6.0 + floor(hash11(seed) * 3.0);
-    float s = fract((y / h) * tiers);
-    float hw = (h - y) * 0.27 * (0.60 + 0.40 * (1.0 - s));
-    hw = max(hw, px1 * 0.8);
-    float jag = (hash11(floor(y / px1) + seed) - 0.5) * px1 * 1.6;   // ragged needles
-    if (abs(p.x - cx) < hw + jag) {
-        if (s > 0.88 && abs(p.x - cx) > hw * 0.55) tip = 1.0;
-        return 1.0;
-    }
-    return 0.0;
-}
-
-// spruce with tier information for shading: returns 1 inside; tip = snowy tier end; tier = 0 (base of tier) .. 1 (top)
-float spruceT(vec2 p, float baseY, float cx, float h, float seed, out float tip, out float tier) {
-    tip = 0.0; tier = 0.0;
-    float y = p.y - baseY;
-    if (y < 0.0 || y > h) return 0.0;
-    float tiers = 6.0 + floor(hash11(seed) * 3.0);
-    float s = fract((y / h) * tiers);
-    float hw = (h - y) * 0.27 * (0.60 + 0.40 * (1.0 - s));
-    hw = max(hw, px1 * 0.8);
-    float jag = (hash11(floor(y / px1) + seed) - 0.5) * px1 * 1.6;
-    if (abs(p.x - cx) < hw + jag) {
-        tier = s;
-        if (s > 0.88 && abs(p.x - cx) > hw * 0.55) tip = 1.0;
-        return 1.0;
-    }
-    return 0.0;
+// one grown spruce from the tree atlas: base y, centre x, height (uv); picks the size bucket at or just above the
+// needed height so pixel art is only ever reduced (by < 2x), never smeared. tx = the relightable texel when inside.
+bool treeSprite(vec2 p, float gy, float cx, float h, float seed, out vec4 tx) {
+    tx = vec4(0.0);
+    float hpx = h / px1;
+    if (p.y < gy || p.y > gy + h || abs(p.x - cx) > 0.40 * h) return false;
+    int b = hpx <= 40.0 ? 3 : hpx <= 80.0 ? 2 : hpx <= 160.0 ? 1 : 0;
+    int bh = b == 0 ? 320 : b == 1 ? 160 : b == 2 ? 80 : 40;
+    int y0 = b == 0 ? 0 : b == 1 ? 320 : b == 2 ? 480 : 560;
+    int bw = int(float(bh) * 0.75);
+    float sc = float(bh) / hpx;
+    int ix = int(floor((p.x - cx) / px1 * sc + float(bw) * 0.5));
+    int iy = int(floor((p.y - gy) / px1 * sc));
+    if (ix < 0 || iy < 0 || ix >= bw || iy >= bh) return false;
+    int v = int(hash11(seed * 1.37 + 0.5) * 11.999);
+    bool flip = hash11(seed * 2.71 + 3.0) < 0.5;
+    if (flip) ix = bw - 1 - ix;
+    tx = texelFetch(treeAtlas, ivec2(v * bw + ix, y0 + bh - 1 - iy), 0);
+    if (tx.a < 0.5) return false;
+    if (flip) tx.r = 1.0 - tx.r;
+    return true;
 }
 
 // distance (in pixels) to a segment
@@ -438,6 +428,20 @@ void main() {
         vec3 tc = side > 0.0 ? snowTip : snowTip * mix(0.75, 0.85, day); \
         c = mix(c, tc, tip * (0.5 + 0.5 * e)); \
         col = mix(c, hazeCol, haze); zTree = (tT); }
+    // shade one grown-spruce texel: lit live from its stored normal by the sun / moon side light, darkened by its ao
+    #define SHADE_SPRITE(cxT, tT, tx) { \
+        float haze = pow(clamp(1.0 - (tT) / 0.42, 0.0, 1.0), 1.4) * 0.80; \
+        float snx = tx.r * 2.0 - 1.0, sny = tx.g * 2.0 - 1.0; \
+        float sb = floor(tx.b * 255.0 + 0.5); int smat = int(sb / 64.0); float sao = mod(sb, 64.0) / 63.0; \
+        float lat = clamp((lightX - (cxT)) * 2.0, -1.0, 1.0); \
+        vec2 Ld = normalize(vec2(lat * (0.35 + 0.85 * lightLow), 1.0 - 0.45 * lightLow)); \
+        float snz = sqrt(max(0.0, 1.0 - snx * snx - sny * sny)); \
+        float dif = clamp(dot(vec2(snx, sny), Ld) * 0.85 + snz * 0.30, 0.0, 1.0); \
+        vec3 c = mix(darkCol, litCol * 1.15, dif) * mix(0.50, 1.08, sao); \
+        if (smat == 1) \
+            c = mix(snowTip * mix(0.60, 0.76, day) * vec3(0.92, 0.96, 1.08), snowTip, dif) * mix(0.78, 1.0, sao); \
+        else if (smat >= 2) c = mix(darkCol, litCol, dif * 0.6) * vec3(1.30, 1.0, 0.75) * 0.9; \
+        col = mix(c, hazeCol, haze); zTree = (tT); }
 
     // distant forest: a band of tiny trees on the horizon (t ~ 0.012) and a slightly larger band just in front (t ~ 0.03),
     // sized to match the perspective of the middle groves (tree height ~ 1.1-2.0 x t)
@@ -456,8 +460,8 @@ void main() {
             float lat = side == 0 ? -(1.5 + 4.0 * hs) : (2.4 + 4.5 * hs);           // world lateral offset (beyond the poles on the right)
             float cxT = roadCx(gy) + roadHw(gy) * sign(lat) + lat * tT;
             float h = (1.1 + 0.9 * hash11(float(i) * 5.3 + float(side))) * tT;
-            float tp, tr;
-            if (spruceT(p, gy, cxT, h, float(i) * 2.9 + float(side) * 31.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(cxT, tT, true) }
+            vec4 tx;
+            if (treeSprite(p, gy, cxT, h, float(i) * 2.9 + float(side) * 31.0, tx)) SHADE_SPRITE(cxT, tT, tx)
         }
     }
     // near framing spruces, hand placed (x from the left edge / right edge, base y, height)
@@ -466,12 +470,12 @@ void main() {
     const vec3 RIGHT[5] = vec3[5](vec3(0.03, 0.23, 0.74), vec3(0.12, 0.26, 0.56), vec3(0.20, 0.28, 0.42),
                                  vec3(0.27, 0.30, 0.30), vec3(0.085, 0.29, 0.36));
     for (int i = 0; i < 6; i++) {
-        float tT = (HZ - LEFT[i].y) / HZ, tp, tr;
-        if (tT > zTree && spruceT(p, LEFT[i].y, LEFT[i].x, LEFT[i].z, float(i) * 5.3 + 1.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(LEFT[i].x, tT, true) }
+        float tT = (HZ - LEFT[i].y) / HZ; vec4 tx;
+        if (tT > zTree && treeSprite(p, LEFT[i].y, LEFT[i].x, LEFT[i].z, float(i) * 5.3 + 1.0, tx)) SHADE_SPRITE(LEFT[i].x, tT, tx)
     }
     for (int i = 0; i < 5; i++) {
-        float tT = (HZ - RIGHT[i].y) / HZ, tp, tr;
-        if (tT > zTree && spruceT(p, RIGHT[i].y, A - RIGHT[i].x, RIGHT[i].z, float(i) * 7.9 + 2.0, tp, tr) > 0.5) { tip = tp; tier = tr; SHADE_TREE(A - RIGHT[i].x, tT, true) }
+        float tT = (HZ - RIGHT[i].y) / HZ; vec4 tx;
+        if (tT > zTree && treeSprite(p, RIGHT[i].y, A - RIGHT[i].x, RIGHT[i].z, float(i) * 7.9 + 2.0, tx)) SHADE_SPRITE(A - RIGHT[i].x, tT, tx)
     }
 
     // ---------------- WILDLIFE: sprite frames sampled 2x2 per art pixel; coverage decided by the ordered dither

@@ -6,7 +6,7 @@ A quiet pixel-art winter road that follows the real time of day, with a tiny sno
 
 ### Description
 
-A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader. No images or textures. Clouds are lit by the real sun or moon: bright, sun-facing tops, darker undersides, golden edges at sunset.
+A procedural pixel-art winter road with old streetlamps, a line of utility poles receding to the horizon, buried fence posts, snow and fog. Everything is drawn by a single GPU shader, including the spruces, which are grown procedurally in 3D, baked to pixel art and relit live by the sun, the moon and the lamps. Clouds are lit by the real sun or moon: bright, sun-facing tops, darker undersides, golden edges at sunset.
 
 The wallpaper follows the real time of day. Sunrise, sunset and the sun's position are calculated from your latitude and longitude. The scene changes between hand-picked palettes for night, dawn, day and dusk, with cold blue nights, rose mornings, clear winter days and mauve evenings.
 
@@ -60,7 +60,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**1.2:** Wildlife (a deer by day, a raccoon by night); passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); three depth layers of trees with atmospheric perspective and sun-facing lighting; cloud shadows drifting across the snow; rendering at pixel-art resolution for much lower GPU use.
+**1.2:** Wildlife (a deer by day, a fox by night) that traffic stops for; procedurally grown spruces (drooping branch whorls, snow on the boughs) relit live by the sun, moon and lamps; banded pixel-art lamplight with a visible beam; passing traffic in both directions with headlights, tail lights and tyre tracks; birds on the wire; a line of utility poles running to the horizon; two distant streetlamps (an old sodium and a cold white LED); snow on the power lines that falls off in clumps during the day; clouds lit by the real sun and moon (ray-marched light, dark undersides); three depth layers of trees with atmospheric perspective; cloud shadows drifting across the snow; rendering at pixel-art resolution for much lower GPU use.
 
 **1.1:** Real day and night cycle, new palettes, dawn snowplough, Send the plough button, Sky scene, patchy snowfall and lamp flicker.
 
