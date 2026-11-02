@@ -860,6 +860,7 @@ void main() {
         if (li == 0 && p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));   // snow cap
     }
 
+    bool glint = false; vec3 glintCol = vec3(1.0);    // glitter: exact colours, past the palette (brighter than white snow)
     // ---------------- CLOUD SHADOWS: a drifting cloud layer projected onto the ground plane (and the trees standing on it)
     {
         float sunUp = day * smoothstep(2.0, 10.0, sunElev);
@@ -911,6 +912,16 @@ void main() {
                     col = mix(col, col * vec3(0.56, 0.65, 0.90), cs);
                     sh *= 0.4;                                                        // don't stack the cloud shade on top
                 }
+                // glitter: ice crystals catching the sun. Sparse candidates on sunlit open snow, each flashing briefly
+                // on its own rhythm; fewer in the distance (a pixel there covers far more snow, and glints are tiny)
+                float gl = uh(q, 4271.0);
+                if (!inSh && gl > 1.0 - 0.045 * (0.25 + tg) * smoothstep(3.0, 12.0, sunElev) * overcast) {
+                    float ph = uh(q, 1913.0);
+                    if (fract(time * (0.35 + 1.2 * ph) + ph * 17.0) < 0.07) {
+                        float hue = uh(q, 677.0);                                       // ice throws white, cyan and gold
+                        glint = true; glintCol = hue < 0.55 ? vec3(1.0) : hue < 0.80 ? vec3(0.72, 0.94, 1.0) : vec3(1.0, 0.90, 0.62);
+                    }
+                }
             }
             col = mix(col, col * vec3(0.70, 0.76, 0.92), sh * 0.85);    // shaded snow goes cooler and bluer, not just darker
         }
@@ -920,6 +931,10 @@ void main() {
     float lum = dot(col, vec3(0.3, 0.5, 0.2));
     col = mix(col, col + warm * 0.55, clamp(pool, 0.0, 1.0) * smoothstep(0.08, 0.30, lum));
     col = mix(col, col * 0.6 + warm * 0.30, clamp(pool, 0.0, 1.0) * (1.0 - smoothstep(0.08, 0.30, lum)) * 0.6);   // dark ground still catches it
+    if (pool > 0.45 && p.y < HZ && zTree < 0.0 && uh(q, 8123.0) > 0.975) {        // glints in the lamplit snow
+        float ph = uh(q, 5507.0);
+        if (fract(time * (0.25 + 0.9 * ph) + ph * 11.0) < 0.10) { glint = true; glintCol = vec3(1.0, 0.88, 0.60); }
+    }
 
     // ---------------- FOG (thickens with the night; warmed in lamplight; dithered by the quantizer)
     float fogH = exp(-max(0.0, p.y - HZ + 0.06) * 5.0);
@@ -1121,5 +1136,5 @@ void main() {
         col = mix(col, fc, vis);
     }
 
-    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : quantize(col, q), 1.0) * qt_Opacity;
+    fragColor = vec4(tail ? PAL_TAIL : exact ? exactCol : aniEx ? aniCol : glint ? glintCol : quantize(col, q), 1.0) * qt_Opacity;
 }

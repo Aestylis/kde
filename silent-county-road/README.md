@@ -16,6 +16,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 - Spruces grown procedurally in 3D (whorls of drooping branches, side sprays, snow on the boughs, dead lower twigs, broken tops), baked to a relightable pixel-art atlas by `tools/gen_trees.py` and lit live by the sun, the moon and the lamps; their tops sway in the wind, and the snow on their boughs builds overnight and melts off by day (sunny outer clumps first)
 - One gusty wind for the whole scene: falling snow slants and streams with it, the trees lean in gusts, the power lines swing and bob (each span on its own rhythm) and strong gusts shake clumps of snow off them, chimney smoke bends, and strong gusts lift wisps of blowing snow across the fields and the road
 - Twilight sky physics: Earth's shadow (a dark blue band rising from the horizon as the sun sinks) with the pink Belt of Venus above it, opposite the sun: on the left at dusk, the right at dawn, lighting the low clouds there too
+- Snow glitter: sparse ice-crystal glints flashing white, cyan and gold on the sunlit snow (drawn past the palette, brighter than the snow), warm glints in the lamplit snow at night
 - Cast shadows: trees, houses, utility poles and lamp posts throw clear blue shadows across the snow, away from the real sun: long at dawn and dusk, short at noon, softened by overcast (worked out in world metres from the scene's perspective)
 - Cloud shadows drifting across the snowfield, the road and the trees on sunny days
 - Clouds lit by the real sun or moon: sunlit tops, dark undersides, golden edges at sunset
