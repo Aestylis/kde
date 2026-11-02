@@ -408,13 +408,13 @@ vec4 spriteTexel(int row, int f, vec2 sp) {                 // sp: sprite pixel,
 // Returns the ground pool; `cone` = the beam seen in the air (falling snow / mist), `halo` = the disc round the head.
 float lampLight(vec2 p, vec2 head, float g, float k, float strength, out float halo, out float cone) {
     vec2 d = p - head;
-    float hr = length(d) / (0.030 * k);
+    float hr = length(d - vec2(0.0, 0.005 * k)) / (0.030 * k);   // centred on the lens
     halo = strength * clamp(1.0 - hr, 0.0, 1.0);
     halo *= halo;
     cone = 0.0;
-    float top = head.y - 0.008 * k, H = top - g, below = top - p.y;
+    float top = head.y + 0.010 * k - max(1.5 * px1, 0.007 * k), H = top - g, below = top - p.y;   // from the lens on the housing's underside
     if (below > 0.0 && below < H + 0.012 * k) {
-        float r = 0.010 * k + below * (0.13 / max(H, 1e-4)) * k;          // beam widens to the pool's width at the ground
+        float r = 0.018 * k + below * (0.13 / max(H, 1e-4)) * k;          // as wide as the lens at the top, the pool at the ground
         float ax = abs(d.x) / r;
         cone = (1.0 - smoothstep(0.88, 1.0, ax))                         // hard edge
              * (1.0 - 0.35 * ax)                                         // a touch brighter down the middle
@@ -503,6 +503,14 @@ void main() {
     float post1 = roadCx(g1) - roadHw(g1) - 0.11 * lt1, post2 = roadCx(g2) - roadHw(g2) - 0.11 * lt2;
     vec2 lamp1 = vec2(post1 + 0.19 * lt1, g1 + 0.64 * lt1);
     vec2 lamp2 = vec2(post2 + 0.19 * lt2, g2 + 0.64 * lt2);
+    // in heavy gusts the steel posts flex: the head (on its long arm) moves most, the base not at all; beam and pool follow
+    float sw1 = 0.0, sw2 = 0.0;
+    if (windAmt > 0.01) {
+        float gL1 = max(gustAt(time - post1 * 2.0), 0.0), gL2 = max(gustAt(time - post2 * 2.0), 0.0);
+        sw1 = min(windAmt, 2.0) * 0.0045 * lt1 * smoothstep(0.35, 1.0, gL1) * (0.75 + 0.25 * sin(time * 2.1));
+        sw2 = min(windAmt, 2.0) * 0.0045 * lt2 * smoothstep(0.35, 1.0, gL2) * (0.75 + 0.25 * sin(time * 2.4 + 1.3));
+        lamp1.x += sw1; lamp2.x += sw2;
+    }
     float f1 = mix(1.0, flicker(time, 3.0, 90.0, 0.35 * max(flickerAmt, 1.0)), min(flickerAmt, 1.0));           // near lamp: rare stutters
     float f2 = mix(1.0, flicker(time + 7.0, 11.0, 40.0, 0.40 * max(flickerAmt, 1.0)), min(flickerAmt, 1.0));    // far lamp: dying, more often
     // switched off by day; on switch-on they stutter for a few seconds before settling
@@ -905,7 +913,7 @@ void main() {
     for (int li = 0; li < 2; li++) {
         float lt = li == 0 ? lt1 : lt2, g = li == 0 ? g1 : g2, postX = li == 0 ? post1 : post2;
         vec2 head = li == 0 ? lamp1 : lamp2;
-        float topY = head.y + 0.02 * lt, fl = li == 0 ? f1 : f2;
+        float topY = head.y + 0.02 * lt, fl = li == 0 ? f1 : f2, sw = li == 0 ? sw1 : sw2;
         float lfade = smoothstep(0.16, 0.02, lt) * 0.9;                                                   // distance haze
         vec3 metal = mix(DN(vec3(0.05, 0.055, 0.07), vec3(0.21, 0.205, 0.21)), hazeCol, lfade);
         vec3 metalHi = mix(DN(vec3(0.10, 0.11, 0.14), vec3(0.36, 0.37, 0.39)), hazeCol, lfade);
@@ -916,8 +924,9 @@ void main() {
         float Lh = max(3.0 * px1, 0.085 * lt), hh = max(1.5 * px1, 0.014 * lt);
         float hx0 = head.x - 0.55 * Lh, hx1 = head.x + 0.45 * Lh;
         if (p.y >= g && p.y < g + baseH && abs(p.x - postX) < bw * 0.5) useRamp = false, col = (p.x < postX - bw * 0.5 + px1) ? metalHi : metal;   // base
-        if (p.y >= g && p.y <= topY - r && abs(p.x - postX) < pw * 0.5) useRamp = false, col = metal;                                          // pole
-        vec2 bc = vec2(postX + r, topY - r);                                                                                   // bend
+        float bend = sw * pow(clamp((p.y - g) / max(topY - g, 1e-4), 0.0, 1.0), 2.0);                                  // the post flexes
+        if (p.y >= g && p.y <= topY - r && abs(p.x - postX - bend) < pw * 0.5) useRamp = false, col = metal;                                          // pole
+        vec2 bc = vec2(postX + sw + r, topY - r);                                                                                   // bend
         if (p.x <= bc.x && p.y >= bc.y && abs(length(p - bc) - r) < pw * 0.5) useRamp = false, col = metal;
         if (p.x >= bc.x && p.x <= hx0 && abs(p.y - topY) < pw * 0.5) useRamp = false, col = metal;                                             // arm
         if (p.x >= hx0 && p.x <= hx1 && p.y >= topY - hh && p.y <= topY + hh * 0.6) {                                         // housing
