@@ -12,7 +12,7 @@ Realism pass (from the 2026-11-01 research: palette ramps, dithering, sky models
 
 Later:
 
-- [ ] **Optimization run.** Measured 2026-11-02: GPU ~14% busy (whole desktop), plasmashell 0–4% of one core, ~500 MB. Ideas: profile which shader sections cost most (render with sections disabled and compare); early-outs for the cast-shadow caster loops and grove placement (bounding checks per pixel row); fewer `gustAt` calls (once per tree, not per texel); cache the static layers (mountains, far treeline, houses) in a texture that only re-renders when the light changes; lower the QML timer work (traffic / wildlife / wind-knock run every frame). Goal: keep the store claim "1–3% of a single core" true at every reading.
+- [x] **Optimization run** (2026-11-02): profiling showed the shader itself costs only ~2-3% GPU; most of the load is KWin recompositing both monitors every frame. Adaptive frame pacing (12 fps when calm, full rate only while something fast is on screen; Sky scene always calm) took the live desktop from 14% to 8-9% GPU. Original notes: Measured 2026-11-02: GPU ~14% busy (whole desktop), plasmashell 0–4% of one core, ~500 MB. Ideas: profile which shader sections cost most (render with sections disabled and compare); early-outs for the cast-shadow caster loops and grove placement (bounding checks per pixel row); fewer `gustAt` calls (once per tree, not per texel); cache the static layers (mountains, far treeline, houses) in a texture that only re-renders when the light changes; lower the QML timer work (traffic / wildlife / wind-knock run every frame). Goal: keep the store claim "1–3% of a single core" true at every reading.
 
 Done:
 

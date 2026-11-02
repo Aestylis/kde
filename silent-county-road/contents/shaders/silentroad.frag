@@ -1307,6 +1307,28 @@ void main() {
     // it stays a see-through glow (adding orange to dark blue night turned brown and muddy)
     // (the beam itself is laid over the finished pixel art at the very end, see fragColor)
 
+    // ---------------- FARAWAY HOUSES: a few single warm pixels deep in the far forest, lit through the evening; each goes out
+    //                  at its own hour (21:00 - 00:30), one may come on again before dawn. They twinkle as branches sway and
+    //                  snow drifts across them, glow faintly through the horizon fog, and anything nearer hides them.
+    if (lamps > 0.5 && p.y < HZ && p.y > HZ - 0.03) {
+        const vec3 FAR[3] = vec3[3](vec3(0.1744, 0.036, 0.0), vec3(0.2616, 0.036, 1.0), vec3(0.7442, 0.036, 2.0));   // x (of A), depth t, id
+        for (int i = 0; i < 3; i++) {
+            float tl = FAR[i].y;
+            if (zTree > tl) continue;                                          // a nearer tree / grove / house is in front
+            vec2 lp = (floor(vec2(FAR[i].x * A, HZ - tl * HZ + 0.6 * px1) / px1) + 0.5) * px1;   // centre of its art pixel
+            if (abs(p.x - lp.x) > 0.5 * px1 || abs(p.y - lp.y) > 0.5 * px1) continue;
+            float hs = hash11(FAR[i].z * 7.7 + 3.1);
+            float off = 21.0 + 3.5 * hs, morn = 5.0 + 1.6 * hash11(FAR[i].z * 2.3 + 8.0);
+            float h = localHour;
+            bool on = h >= 13.0 ? h < off : (h < 4.0 ? h + 24.0 < off : (FAR[i].z < 0.5 && h >= morn));
+            if (!on) continue;
+            float tw = vnoise(vec2(time * (0.9 + 0.6 * hs) + FAR[i].z * 13.0, FAR[i].z * 5.0));   // branches crossing the light
+            float lvl = tw < 0.28 ? 0.35 : tw < 0.42 ? 0.7 : 1.0;
+            vec3 lc = mix(vec3(1.0, 0.80, 0.46), vec3(1.0, 0.88, 0.62), hs);
+            glint = true; glintCol = mix(lc * (0.55 + 0.45 * lvl), fogCol, clamp(fog, 0.0, 0.75) * 0.22);   // a clear warm point, lightly hazed
+        }
+    }
+
     // ---------------- DISTANT STREETLAMPS (after the fog: lights shine through it; old sodium one, then a cold white LED)
     for (int i = 0; i < 2; i++) {
         float tl = i == 0 ? 0.058 : 0.034;
