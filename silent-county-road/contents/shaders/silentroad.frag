@@ -705,6 +705,19 @@ void main() {
             }
             col = mix(c, hazeCol, hz); zTree = tH; houseFog = hz < haze ? 0.15 : 0.45;
         }
+        // lee drift: wind-blown snow banks up downwind of the building (to the right), tapering away from the wall
+        if (tH > zTree) {
+            float halfW = (v == 0 ? 0.56 : v == 1 ? 0.40 : v == 2 ? 0.44 : 0.47) * hb;
+            float x0 = cxH + halfW * 0.92, L = (0.30 + 0.25 * e) * hb, hd = (0.035 + 0.04 * e) * hb;
+            float u = (p.x - x0) / L;
+            if (u > 0.0 && u < 1.0) {
+                float dh = hd * pow(1.0 - u, 1.6) * (0.85 + 0.3 * vnoise(vec2(p.x / px1 * 0.4, float(i))));
+                if (p.y >= gy - 0.012 * hb && p.y < gy + max(dh, 0.5 * px1)) {
+                    vec3 dsn = DN(vec3(0.40, 0.44, 0.53), vec3(0.92, 0.94, 0.96)) * (p.y > gy + dh - px1 ? vec3(1.04) : vec3(0.80, 0.86, 1.0));   // bright crest, blue-shaded flank
+                    col = mix(dsn, hazeCol, haze * 0.8); zTree = tH; houseFog = 0.6;
+                }
+            }
+        }
         // chimney smoke: a plume of drifting noise puffs, widening and fading as it rises, leaning downwind
         if (CHIM[v].z > 0.5) {
             float h = localHour;
@@ -817,7 +830,7 @@ void main() {
             if (abs(p.x - xl) < max(0.5, P.wpx * 0.5) * px1 && P.t > zTree) col = poleCol;
         }
         if (abs(p.y - P.armY) < 0.5 * px1 && p.x >= P.armL.x && p.x <= P.armR.x) col = poleCol;
-        if (k == 0 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + 1.2 * e))
+        if (k < 3 && p.x >= P.armL.x && p.x <= P.armR.x && p.y > P.armY + 0.5 * px1 && p.y < P.armY + px1 * (0.6 + (k == 0 ? 1.2 : 0.6) * e))
             col = DN(vec3(0.40, 0.44, 0.52), vec3(0.93, 0.95, 0.96));   // snow on the near crossarm
         if (k < 63) {                                             // two wires to the next pole
             Pole Q = pole(k + 1);
@@ -860,7 +873,9 @@ void main() {
             if (p.y < topY - hh + max(px1, hh * 0.45) && p.x > hx0 + px1 && p.x < hx1 - px1)                                   // lens strip
                 col = mix(mix(DN(vec3(0.33, 0.26, 0.19), vec3(0.50, 0.51, 0.53)), hazeCol, lfade), li == 0 ? vec3(1.0, 0.86, 0.55) : vec3(0.85, 0.68, 0.42), fl);
         }
-        if (li == 0 && p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) col = DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96));   // snow cap
+        vec3 lsnow = mix(DN(vec3(0.44, 0.48, 0.56), vec3(0.93, 0.95, 0.96)), hazeCol, lfade);
+        if (p.x >= hx0 && p.x <= hx1 && p.y > topY + hh * 0.6 && p.y < topY + hh * 0.6 + px1 * (1.0 + e)) col = lsnow;          // snow cap on the head
+        if (e > 0.15 && p.x >= bc.x + px1 && p.x <= hx0 && p.y > topY + pw * 0.5 && p.y < topY + pw * 0.5 + px1 * (0.6 + 0.6 * e)) col = lsnow;   // and along the arm
     }
 
     bool glint = false; vec3 glintCol = vec3(1.0);    // glitter: exact colours, past the palette (brighter than white snow)

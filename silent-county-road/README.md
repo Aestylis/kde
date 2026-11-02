@@ -17,6 +17,7 @@ it every morning. Fully procedural: one GPU fragment shader, no images.
 - One gusty wind for the whole scene: falling snow slants and streams with it, the trees lean in gusts, the power lines swing and bob (each span on its own rhythm) and strong gusts shake clumps of snow off them, chimney smoke bends, and strong gusts lift wisps of blowing snow across the fields and the road; the falling snow eddies on a swirling (curl-noise) flow and the near flakes streak along their path in gusts
 - Twilight sky physics: Earth's shadow (a dark blue band rising from the horizon as the sun sinks) with the pink Belt of Venus above it, opposite the sun: on the left at dusk, the right at dawn, lighting the low clouds there too
 - Two kinds of dithering, as in Return of the Obra Dinn: interleaved gradient noise (blue-noise-like grain) for the sky, clouds and mountains, crisp 4x4 Bayer for everything else
+- Snow settles where it would: caps on fence posts, lamp heads and crossarms, a line along the lamp arms, and lee drifts banked downwind of the buildings
 - Snow glitter: sparse ice-crystal glints flashing white, cyan and gold on the sunlit snow (drawn past the palette, brighter than the snow), warm glints in the lamplit snow at night
 - Cast shadows: trees, houses, utility poles and lamp posts throw clear blue shadows across the snow, away from the real sun: long at dawn and dusk, short at noon, softened by overcast (worked out in world metres from the scene's perspective)
 - Cloud shadows drifting across the snowfield, the road and the trees on sunny days

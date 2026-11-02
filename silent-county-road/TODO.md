@@ -7,7 +7,7 @@ Realism pass (from the 2026-11-01 research: palette ramps, dithering, sky models
 - [x] **Snow glitter.** Sparse points twinkling on the sunlit snowfield and under the lamps, driven by time and the sun's movement (the camera is fixed). Based on the jittered sparkle grid from real-time sparkle papers.
 - [x] **Blue-noise dithering for sky, fog and clouds.** Interleaved gradient noise in place of Bayer for the environment (no crosshatch, film-grain look); Bayer stays for objects, as in Obra Dinn.
 - [x] **Snowfall motion.** Near flakes stretch into short streaks in strong gusts, plus a little curl-noise turbulence so flakes eddy instead of sliding in lockstep.
-- [ ] **Snow that settles by slope and shelter.** Snow caps on fence posts, lamp heads and crossarms; drifts banked on the windward side of buildings.
+- [x] **Snow that settles by slope and shelter.** Snow caps on fence posts, both lamp heads, along the lamp arms and on the near crossarms; lee drifts (downwind, to the right) beside the buildings, with a bright crest and blue-shaded flank.
 - [ ] **Shading ramps for each material** (the deep one, its own session). Every material gets its own hue-shifted ramp (cool shadows, warm highlights, about 20° of hue over 3–5 steps) and light picks a step on it, replacing the snap to the nearest of 23 palette colours. LutLight2D-style.
 
 Done:
