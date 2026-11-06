@@ -16,6 +16,16 @@ FEATURES
 • Second monitor: an optional Sky scene shows the same sun, moon, clouds and time of day, in sync with the main wallpaper.
 • Procedural pixel art: 3D-generated scenery with material-specific palettes, shading and dithering, rendered by a GPU shader. Typical CPU use is about 1–3% of one core.
 
+REQUIREMENTS
+
+• KDE Plasma 6.0 or newer (X11 or Wayland)
+
+• Graphics with OpenGL 3.2, OpenGL ES 3.0 or Vulkan (any GPU from the last ten or so years, including Intel integrated graphics)
+
+• Internet access only if you turn on live weather
+
+• Not for Plasma 5: the wallpaper uses the Plasma 6 plugin system
+
 SETTINGS
 
 Scene (Road, or Sky for a second monitor), pixel size, frame rate, snowfall, fog, wind, lamp flicker and winter conditions. Set your latitude and longitude for accurate sun and moon positions, turn on live weather, or preview any hour of the day. Buttons let you send the plow, wildlife or a passing car whenever you like.
@@ -27,7 +37,6 @@ INSTALL
 Desktop and Wallpaper → Get New Plugins… → search for "Silent County Road", then pick it under Wallpaper type.
 Or manually: kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.1.tar.gz
 
-Requires Plasma 6 and graphics with OpenGL 3.2, OpenGL ES 3.0 or Vulkan.
 
 Source and issues: https://github.com/Aestylis/kde/tree/main/silent-county-road
 Licence: MIT
