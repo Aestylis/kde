@@ -487,6 +487,20 @@ WallpaperItem {
         layer.smooth: false
         layer.textureSize: Qt.size(Math.max(1, Math.floor(width / pix)), Math.max(1, Math.floor(height / pix)))
     }
+    // if the shader cannot start on this system, say so on the wallpaper (instead of a silent black screen) with the reason,
+    // so a bug report can carry it
+    Text {
+        visible: fx.status === ShaderEffect.Error
+        anchors.centerIn: parent
+        width: parent.width * 0.6
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.Wrap
+        color: "#d8dde6"
+        font.pixelSize: 16
+        text: "Silent County Road could not start its shader on this system (graphics API " + GraphicsInfo.api + ").\n"
+              + "Please report this with your distribution, Plasma version and GPU: https://github.com/Aestylis/kde/issues\n\n" + fx.log
+    }
+
 
     Component.onCompleted: update()
     onPreviewHourChanged: update()

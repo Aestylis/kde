@@ -68,7 +68,7 @@ https://github.com/Aestylis/kde/tree/main/silent-county-road
 
 ### Changelog
 
-**2.1:** Adaptive frame pacing: the scene renders at up to 12 fps when calm and at full rate only while something fast is on screen, roughly halving GPU use (14% to 8-9% on the author's desktop). A few faraway house lights twinkle in the woods in the evening.
+**2.1:** Adaptive frame pacing: the scene renders at up to 12 fps when calm and at full rate only while something fast is on screen, roughly halving GPU use (14% to 8-9% on the author's desktop). A few faraway house lights twinkle in the woods in the evening. Compatibility fix: shaders are now built in the Qt 6.5 format and include OpenGL ES 3.0, so the wallpaper loads on distributions with older Qt and on GLES-only graphics. If the shader still can't start, the wallpaper shows the reason instead of a black screen.
 
 **2.0:** A full landscape. Optional live weather from Open-Meteo (wind, gusts, direction, snowfall, cloud cover and cloud type); moonlight and sunlight cast shadows; Earth's shadow and the Belt of Venus at twilight; three mountain ranges with alpenglow; procedurally grown spruces that sway, hold snow overnight and shed it by day; a farmhouse, red barn, cabin and cottage with chimney smoke and windows on their own evening schedules; 1980s traffic and a full-sized county snowplow drawn in 3D through the scene's camera; deer by day, foxes at night, birds on the wire; one gusty wind driving snow, trees, wires, smoke and streetlamps; snow glitter; material-specific shading ramps and dithering.
 

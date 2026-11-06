@@ -27,7 +27,7 @@ INSTALL
 Desktop and Wallpaper → Get New Plugins… → search for "Silent County Road", then pick it under Wallpaper type.
 Or manually: kpackagetool6 -t Plasma/Wallpaper -i silent-county-road-2.1.tar.gz
 
-Requires Plasma 6. The shaders need desktop OpenGL or Vulkan.
+Requires Plasma 6 and graphics with OpenGL 3.2, OpenGL ES 3.0 or Vulkan.
 
 Source and issues: https://github.com/Aestylis/kde/tree/main/silent-county-road
 Licence: MIT

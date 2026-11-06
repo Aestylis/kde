@@ -57,7 +57,7 @@ You can also manually **Send the plough**, **Send wildlife** or **Send a car** w
 
 Run `./build.sh` to compile the shaders and create the store archive in `dist/`.
 
-Requires `qt6-qtshadertools` for `qsb`. The shaders target desktop OpenGL / Vulkan (GLSL 150/330), not GLES.
+Requires `qt6-qtshadertools` for `qsb`. The shaders target desktop OpenGL 3.2+, OpenGL ES 3.0 and Vulkan, in the Qt 6.5 shader format so they load on every Plasma 6 system.
 
 ## Licence
 
