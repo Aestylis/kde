@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="preset" type="Int"><default>0</default></entry>
+    <entry name="color1" type="Color"><default>#3b3bff</default></entry>
+    <entry name="color2" type="Color"><default>#8a3cff</default></entry>
+    <entry name="color3" type="Color"><default>#e040fb</default></entry>
+    <entry name="color4" type="Color"><default>#ff2d87</default></entry>
+    <entry name="fourColors" type="Bool"><default>true</default></entry>
+    <entry name="colorMix" type="Int"><default>25</default><min>0</min><max>100</max></entry>
+    <entry name="dots" type="Int"><default>110</default><min>20</min><max>500</max></entry>
+    <entry name="dotSize" type="Int"><default>100</default><min>0</min><max>300</max></entry>
+    <entry name="linkDist" type="Int"><default>75</default><min>30</min><max>100</max></entry>
+    <entry name="lineWidth" type="Int"><default>100</default><min>50</min><max>400</max></entry>
+    <entry name="lineBright" type="Int"><default>100</default><min>0</min><max>200</max></entry>
+    <entry name="triAmount" type="Int"><default>60</default><min>0</min><max>100</max></entry>
+    <entry name="triOpacity" type="Int"><default>60</default><min>0</min><max>100</max></entry>
+    <entry name="speed" type="Int"><default>100</default><min>0</min><max>400</max></entry>
+    <entry name="layoutMode" type="Int"><default>1</default><min>0</min><max>2</max></entry>
+    <entry name="coverage" type="Int"><default>50</default><min>5</min><max>100</max></entry>
+    <entry name="layers" type="Int"><default>3</default><min>1</min><max>4</max></entry>
+    <entry name="blur" type="Int"><default>50</default><min>0</min><max>100</max></entry>
+    <entry name="glow" type="Int"><default>30</default><min>0</min><max>100</max></entry>
+    <entry name="brightness" type="Int"><default>100</default><min>20</min><max>200</max></entry>
+    <entry name="span" type="Bool"><default>true</default></entry>
+    <entry name="arrangement" type="Int"><default>0</default><min>0</min><max>1</max></entry>
+    <entry name="renderScale" type="Int"><default>0</default><min>0</min><max>1</max></entry>
+    <entry name="fps" type="Int"><default>24</default><min>12</min><max>24</max></entry>
+  </group>
+</kcfg>
