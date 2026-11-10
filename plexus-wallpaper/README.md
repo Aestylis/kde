@@ -42,10 +42,11 @@ Then choose *Plexus* under *Desktop and Wallpaper → Wallpaper type*. Use `-u` 
 
 ## How it works
 
-One fragment shader (`contents/shaders/plexus.frag`) draws everything per pixel; there is no geometry and no blur
-pass. The plane is a grid of cells with one dot each, so a pixel only inspects the few dots near it. The blurred
-layers are softened analytically and rendered at reduced resolution. All motion is a whole multiple of one loop
-phase, so it runs for weeks without drifting. After editing the shader run `./build.sh` (needs `qsb` from
-qt6-qtshadertools).
+Two fragment shaders, no geometry and no blur pass. The plane is a grid of cells with one dot each.
+`contents/shaders/cells.frag` works out every dot's position, presence and colour once per cell into a small float
+texture; `contents/shaders/plexus.frag` then draws each pixel by reading the few dots near it. The blurred layers
+are softened analytically and rendered at reduced resolution. All motion is a whole multiple of one loop phase
+taken from the wall clock, so it runs for weeks without drifting and all monitors stay in step. After editing a
+shader run `./build.sh` (needs `qsb` from qt6-qtshadertools).
 
 MIT © Aestylis

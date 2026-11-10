@@ -1,7 +1,7 @@
 /* Plexus — Plasma 6 animated wallpaper for OLED screens.
  * Slowly wandering dots that link up with lines when they come close and fill in as translucent triangles, in a few
  * depth layers with out-of-focus blur, on a true-black background. One fragment shader (../shaders/plexus.frag) draws
- * all of it; this file only feeds it the settings, a looping phase and where this screen sits in the desktop.
+ * all of it; this file only feeds it (and ../shaders/cells.frag) the settings, a looping phase and where this screen sits in the desktop.
  *
  * Every monitor runs its own copy. They line up into one picture because (1) the phase comes from the wall clock, so
  * all copies are at the same moment, and (2) with "span" on, each copy draws its own window of one desktop-wide
@@ -70,7 +70,35 @@ WallpaperItem {
 
     Rectangle { anchors.fill: parent; color: "black" }
 
-    // The shader is instanced three times, each drawing some of the depth layers additively over the black rectangle.
+    // dot density is counted per 2560x1440 of desktop so that every monitor gets the same cell size
+    readonly property real cell: Math.sqrt(2560 * 1440 / Math.max(10, cfg("dots", 110)))
+
+    // Pass 1: where every dot is, whether it exists and its colour, once per cell, into a small float texture.
+    ShaderEffect {
+        id: cellFx
+        width: 128; height: 512
+        blending: false
+        fragmentShader: Qt.resolvedUrl("../shaders/cells.frag.qsb")
+        property real phase: main.phase
+        property real cell: main.cell
+        property point origin: main.origin
+        property size size: Qt.size(main.width, main.height)
+        property size frame: main.frame
+        property real coverage: main.cfg("coverage", 50) / 100
+        property real layoutMode: main.cfg("layoutMode", 1)
+        property real colorMix: main.cfg("colorMix", 25) / 100
+    }
+    ShaderEffectSource {
+        id: cellTex
+        sourceItem: cellFx
+        hideSource: true
+        visible: false
+        smooth: false
+        format: ShaderEffectSource.RGBA16F
+        textureSize: Qt.size(128, 512)
+    }
+
+    // Pass 2: the shader is instanced three times, each drawing some of the depth layers additively over the black rectangle.
     // The soft, out-of-focus layers are rendered into smaller textures and scaled up: nobody can tell, and it is cheap.
     component Plexus: ShaderEffect {
         property real texel: main.baseTexel      // logical px per rendered texel
@@ -85,8 +113,8 @@ WallpaperItem {
         property point origin: main.origin
         property size size: Qt.size(width, height)
         property size frame: main.frame
-        // dot density is counted per 2560x1440 of desktop so that every monitor gets the same cell size
-        property real cell: Math.sqrt(2560 * 1440 / Math.max(10, main.cfg("dots", 110)))
+        property real cell: main.cell
+        property variant cells: cellTex
         property real linkDist: main.cfg("linkDist", 75) / 100 * 1.5
         property real dotR: 2.2 * main.cfg("dotSize", 100) / 100
         property real lineW: 0.55 * main.cfg("lineWidth", 100) / 100
@@ -95,9 +123,6 @@ WallpaperItem {
         property real triOpacity: main.cfg("triOpacity", 60) / 100
         property real blur: main.blurPx
         property real glow: main.cfg("glow", 30) / 100
-        property real coverage: main.cfg("coverage", 50) / 100
-        property real layoutMode: main.cfg("layoutMode", 1)
-        property real colorMix: main.cfg("colorMix", 25) / 100
         property real nColors: main.cfg("fourColors", true) ? 4 : 3
         property real gain: main.cfg("brightness", 100) / 100
         property color c1: main.cfg("color1", "#3b3bff")

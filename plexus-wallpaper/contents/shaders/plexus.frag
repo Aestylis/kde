@@ -1,6 +1,8 @@
 #version 440
 // Plexus wallpaper. Everything is drawn per pixel, no geometry:
-//   * the plane is cut into square cells and every cell owns one dot that wanders inside it,
+//   * the plane is cut into square cells and every cell owns one dot that wanders inside it. Where each dot is, whether
+//     it exists and its colour are worked out once per cell by cells.frag into a small float texture; this shader only
+//     reads them,
 //   * a pixel only has to look at the 4x4 cells nearest to it: because links are never longer than 1.5 cells, every
 //     line or triangle that can touch the pixel has all its corners in that neighbourhood. Of those 16 cells only the
 //     dots within link distance of the pixel are kept (usually about four), so the pair and triple loops stay tiny,
@@ -32,15 +34,16 @@ layout(std140, binding = 0) uniform buf {
     float triOpacity;  // 0..1
     float blur;        // at blur factor 1
     float glow;        // 0..1
-    float coverage;    // 0..1
-    float layoutMode;  // 0 clusters, 1 wave, 2 everywhere
-    float colorMix;    // 0 smooth gradient .. 1 every dot its own colour
     float nColors;     // 3 or 4
     float gain;
     vec4 c1; vec4 c2; vec4 c3; vec4 c4;
 };
+layout(binding = 1) uniform sampler2D cells;   // see cells.frag
 
 const float TAU = 6.2831853;
+// must stay identical to cells.frag
+const float LSCALE[4] = float[4](1.0, 1.9, 0.66, 3.1);
+const float LANGLE[4] = float[4](0.0, 0.5, -0.35, 1.1);
 
 uint pcg(uint v) {
     uint s = v * 747796405u + 2891336453u;
@@ -49,6 +52,11 @@ uint pcg(uint v) {
 }
 float u01(uint h) { return float(h >> 8) * (1.0 / 16777216.0); }
 uint hcell(ivec2 c, uint seed) { return pcg(uint(c.x) + pcg(uint(c.y) + seed)); }
+
+vec2 layerOff(int li, uint seed) {
+    return vec2(u01(seed), u01(pcg(seed))) * 64.0
+         + 1.3 * vec2(cos(TAU * (float(li + 1) * phase + 0.17 * float(li))), sin(TAU * (float(li + 1) * phase)));
+}
 
 vec3 pal(float t) {
     t = clamp(t, 0.0, 1.0) * (nColors - 1.0);
@@ -60,14 +68,14 @@ vec3 pal(float t) {
 // thin things get dimmer as their light is spread out
 float spread(float hw, float b) { return pow((hw + 0.75) / (hw + 0.75 + b), 0.4); }
 
-vec3 layer(vec2 fp, int li, float scale, float ang, float bf, float dim) {
+vec3 layer(vec2 fp, int li, float bf, float dim) {
+    float scale = LSCALE[li], ang = LANGLE[li];
     uint seed = pcg(uint(li) * 977u + 11u);
     float s = cell * scale;                 // px per cell
     float b = blur * bf;
     float aa = 0.75 * texel;
     float cs = cos(ang), sn = sin(ang);
-    vec2 off = vec2(u01(seed), u01(pcg(seed))) * 64.0
-             + 1.3 * vec2(cos(TAU * (float(li + 1) * phase + 0.17 * float(li))), sin(TAU * (float(li + 1) * phase)));
+    vec2 off = layerOff(li, seed);
     vec2 d0 = (fp - frame * 0.5) / s;
     vec2 q = vec2(cs * d0.x - sn * d0.y, sn * d0.x + cs * d0.y) + off;
     vec2 base = floor(q);
@@ -81,8 +89,6 @@ vec3 layer(vec2 fp, int li, float scale, float ang, float bf, float dim) {
     float edge = (b + aa + (gl > 0.0 ? 3.0 * sig : 0.0)) / s;      // how far outside a shape it still lights pixels, cells
     float lineReach = edge + hwL / s, dotReach = edge * 1.6 + rD / s;
     float reach = min(linkDist + lineReach, 1.5);
-    float asp = frame.x / frame.y;
-    float th = 1.0 - coverage;
 
     // gather the dots that can matter for this pixel
     vec2 P[16]; float PW[16]; float PT[16]; float PD[16]; uint PID[16];
@@ -92,36 +98,12 @@ vec3 layer(vec2 fp, int li, float scale, float ang, float bf, float dim) {
         vec2 bd = max(max(o + 0.06 - f, f - o - 0.94), 0.0);
         if (dot(bd, bd) > reach * reach) continue;
         ivec2 c = ib + ivec2(o);
-        uint h = hcell(c, seed), h2 = pcg(h);
-        // wander: two whole-number harmonics per axis, always inside the cell
-        float k1 = 20.0 + float(h & 31u), k2 = 45.0 + float((h >> 5) & 63u);
-        float k3 = 20.0 + float((h >> 11) & 31u), k4 = 45.0 + float((h >> 16) & 63u);
-        vec4 ph = vec4(float(h2 & 255u), float((h2 >> 8) & 255u), float((h2 >> 16) & 255u), float(h2 >> 24)) / 256.0;
-        vec4 sw = sin(TAU * fract(vec4(k1, k2, k3, k4) * phase + ph));
-        vec2 p = o + 0.5 + 0.44 * vec2(0.62 * sw.x + 0.38 * sw.y, 0.62 * sw.z + 0.38 * sw.w);
+        vec4 dot4 = textureLod(cells, (vec2(c & 127) + vec2(0.5, 0.5 + 128.0 * float(li))) / vec2(128.0, 512.0), 0.0);
+        if (dot4.b <= 0.0) continue;
+        vec2 p = o + 0.5 + dot4.rg;
         float d = length(f - p);
         if (d > reach) continue;
-        // where this cell sits on screen decides whether its dot exists and what colour it leans to
-        vec2 cc = (vec2(c) + 0.5 - off) * s;
-        vec2 uv = (vec2(cs * cc.x + sn * cc.y, -sn * cc.x + cs * cc.y) + frame * 0.5) / frame;
-        float x = uv.x * asp + 0.37 * float(li), y = uv.y;
-        float m = 2.0;
-        if (layoutMode < 1.5) {
-            float nz = 0.5 + 0.25 * (sin(x * 4.7 + 1.7 * sin(y * 3.9 + TAU * 2.0 * phase) + TAU * 3.0 * phase)
-                                   + sin(y * 6.1 - 1.3 * sin(x * 2.9 - TAU * 4.0 * phase) + TAU * 5.0 * phase + 2.0));
-            if (layoutMode > 0.5) {
-                float yc = 0.5 + 0.11 * sin(uv.x * 4.0 + TAU * 3.0 * phase) + 0.05 * sin(uv.x * 9.0 - TAU * 5.0 * phase);
-                m = 1.0 - abs(uv.y - yc) * 2.2 + (nz - 0.5) * 0.55;
-            } else m = nz;
-        }
-        float pw = smoothstep(th - 0.07, th + 0.07, m);
-        if (pw <= 0.0) continue;
-        // each dot also fades out for a while now and then
-        pw *= smoothstep(-0.95, -0.6, sin(TAU * fract((6.0 + float((h >> 22) & 15u)) * phase + float(h >> 26) / 64.0)));
-        if (pw <= 0.0) continue;
-        float sp = uv.x * 0.8 + 0.1 + 0.13 * sin(x * 2.3 + y * 3.1 + TAU * 2.0 * phase) + 0.09 * sin(y * 7.0 - x * 1.9 - TAU * 3.0 * phase);
-        P[cnt] = p; PW[cnt] = pw; PD[cnt] = d; PID[cnt] = h;
-        PT[cnt] = mix(sp, u01(pcg(h2)), colorMix);
+        P[cnt] = p; PW[cnt] = dot4.b; PD[cnt] = d; PT[cnt] = dot4.a; PID[cnt] = hcell(c, seed);
         cnt++;
     }
     if (cnt == 0) return vec3(0.0);
@@ -195,10 +177,10 @@ void main() {
     vec2 fp = origin + qt_TexCoord0 * size;
     int mask = int(layerMask + 0.5);
     vec3 col = vec3(0.0);
-    if ((mask & 1) != 0) col += layer(fp, 0, 1.0, 0.0, 0.0, 1.0);
-    if ((mask & 2) != 0) col += layer(fp, 1, 1.9, 0.5, 1.0, 0.95);
-    if ((mask & 4) != 0) col += layer(fp, 2, 0.66, -0.35, 0.3, 0.7);
-    if ((mask & 8) != 0) col += layer(fp, 3, 3.1, 1.1, 2.2, 0.8);
+    if ((mask & 1) != 0) col += layer(fp, 0, 0.0, 1.0);
+    if ((mask & 2) != 0) col += layer(fp, 1, 1.0, 0.95);
+    if ((mask & 4) != 0) col += layer(fp, 2, 0.3, 0.7);
+    if ((mask & 8) != 0) col += layer(fp, 3, 2.2, 0.8);
     col *= gain;
 
     // overlaps burn towards white instead of clipping one channel
