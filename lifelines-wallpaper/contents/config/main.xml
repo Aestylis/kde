@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="population" type="Int"><default>28</default><min>8</min><max>48</max></entry>
+    <entry name="pace" type="Int"><default>100</default><min>40</min><max>300</max></entry>
+    <entry name="lifespan" type="Int"><default>10</default><min>3</min><max>40</max></entry>
+    <entry name="persistence" type="Int"><default>40</default><min>5</min><max>180</max></entry>
+    <entry name="threadWidth" type="Int"><default>100</default><min>50</min><max>250</max></entry>
+    <entry name="traceBrightness" type="Int"><default>70</default><min>10</min><max>100</max></entry>
+    <entry name="timelapse" type="Bool"><default>true</default></entry>
+  </group>
+</kcfg>

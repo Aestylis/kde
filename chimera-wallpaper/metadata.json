@@ -1,0 +1,17 @@
+{
+  "KPlugin": {
+    "Id": "aestylis.plasma.wallpaper.chimera",
+    "Name": "Chimera",
+    "Version": "1.0",
+    "Category": "Wallpaper",
+    "Description": "A field of dots that flash like fireflies, each nudging its neighbours' rhythm. Parts of the field fall into unison and send waves and spirals across the screen while other parts never settle: a chimera state. True black between the dots, for OLED screens.",
+    "Icon": "preferences-desktop-wallpaper",
+    "License": "MIT",
+    "Website": "https://github.com/Aestylis/kde/tree/main/chimera-wallpaper",
+    "Authors": [{ "Name": "Aestylis" }]
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-MainScript": "ui/main.qml",
+  "X-KDE-PluginInfo-HasConfiguration": true,
+  "KPackageStructure": "Plasma/Wallpaper"
+}
