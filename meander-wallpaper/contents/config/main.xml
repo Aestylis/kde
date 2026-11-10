@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="palette" type="Int"><default>0</default><min>0</min><max>4</max></entry>
+    <entry name="channelWidth" type="Int"><default>100</default><min>50</min><max>200</max></entry>
+    <entry name="speed" type="Int"><default>3</default><min>1</min><max>8</max></entry>
+    <entry name="persistence" type="Int"><default>30</default><min>5</min><max>180</max></entry>
+    <entry name="trailBrightness" type="Int"><default>75</default><min>10</min><max>100</max></entry>
+    <entry name="riverBrightness" type="Int"><default>100</default><min>20</min><max>100</max></entry>
+  </group>
+</kcfg>

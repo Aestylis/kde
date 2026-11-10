@@ -1,0 +1,17 @@
+{
+  "KPlugin": {
+    "Id": "aestylis.plasma.wallpaper.meander",
+    "Name": "Meander",
+    "Version": "1.0",
+    "Category": "Wallpaper",
+    "Description": "A river that slowly wanders across a black screen: bends grow, tighten and cut themselves off into oxbow lakes, and every old course stays behind as a fading coloured band, like a survey map of a river's past. It never repeats.",
+    "Icon": "preferences-desktop-wallpaper",
+    "License": "MIT",
+    "Website": "https://github.com/Aestylis/kde/tree/main/meander-wallpaper",
+    "Authors": [{ "Name": "Aestylis" }]
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-MainScript": "ui/main.qml",
+  "X-KDE-PluginInfo-HasConfiguration": true,
+  "KPackageStructure": "Plasma/Wallpaper"
+}
